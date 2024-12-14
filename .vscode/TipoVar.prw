@@ -1,3 +1,6 @@
+#INCLUDE "protheus.ch"
+#INCLUDE "PRTOPDEF.CH"
+
 Static cVar5 := "Static"
 
 User Function Func1()
