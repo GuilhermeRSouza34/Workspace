@@ -1,6 +1,10 @@
+Static cVar5 := "Static"
+
 User Function Func1()
 Local cVar1 := "Local"
 Private cVar2 := "Private"
+
+U_Func4()
 
 U_Func2()
 
