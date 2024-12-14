@@ -3,9 +3,8 @@
 
 User Function Tipo1()
 	Alert ("Essa é uma user function")
-
+    Tipo2();
 Return
-
 
 Static Function Tipo2()
 
