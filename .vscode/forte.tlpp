@@ -12,6 +12,5 @@ User /*/{Protheus.doc} Fo (description)
 Function Forte ()
 local cTexto as Character
 
-cTexto := 10
     
 Return return_var
