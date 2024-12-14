@@ -1,0 +1,17 @@
+User /*/{Protheus.doc} Fo (description)
+    @type  Function
+    @author user
+    @since 14/12/2024
+    @version version
+    @param param_name, param_type, param_descr
+    @return return_var, return_type, return_description
+    @example
+    (examples)
+    @see (links_or_references)
+    /*/
+Function Forte ()
+local cTexto as Character
+
+cTexto := 10
+    
+Return return_var
