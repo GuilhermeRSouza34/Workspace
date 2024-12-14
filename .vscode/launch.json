@@ -18,7 +18,13 @@
 	"lastPrograms": [
 		{
 			"label": "U_soma"
+		},
+		{
+			"label": "U_Tipo1"
+		},
+		{
+			"label": "Tipo2"
 		}
 	],
-	"lastProgramExecuted": "U_soma"
+	"lastProgramExecuted": "Tipo2"
 }
