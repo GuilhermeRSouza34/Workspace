@@ -50,3 +50,34 @@ Static Function ListarClientes()
 
     Return
 EndFunc
+
+// Função para buscar um cliente pelo código
+Static Function BuscarCliente()
+    Local cCodigo := ""                // Variável para armazenar o código informado pelo usuário
+    Local cQuery  := ""
+    Local oSql    := SQLCreate()
+
+    // Captura o código do cliente
+    cCodigo := InputBox("Informe o código do cliente:")
+    If Empty(cCodigo)
+        MsgStop("Código não pode ser vazio.", "Erro")
+        Return
+    EndIf
+
+    // Define a query para buscar o cliente
+    cQuery := "SELECT C1_NOME, C1_END FROM SA101 WHERE C1_CODIGO = '" + cCodigo + "'"
+
+    If oSql:Open(cQuery)
+        If !oSql:Eof()
+            MsgInfo("Nome: " + oSql:FieldGet("C1_NOME") + CRLF + "Endereço: " + oSql:FieldGet("C1_END"), "Cliente encontrado")
+        Else
+            MsgStop("Cliente não encontrado.", "Erro")
+        EndIf
+        oSql:Close()
+    Else
+        MsgStop("Erro ao executar consulta SQL.", "Erro")
+    EndIf
+
+    Return
+EndFunc
+
