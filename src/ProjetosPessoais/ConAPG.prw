@@ -93,3 +93,15 @@ Static Function ZCONTA_Listar(aContas)
 
 Return
 
+// Função para calcular o total das contas a pagar
+Static Function ZCONTA_Total(aContas)
+    Local nTotal := 0.00
+
+    // Soma o valor de todas as contas
+    For Each aConta In aContas
+        nTotal += aConta[3]
+    Next
+
+    MsgInfo("Total das contas a pagar: " + Transform(nTotal, "@E 999,999.99"))
+
+Return
