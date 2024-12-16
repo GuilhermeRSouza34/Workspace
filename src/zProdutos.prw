@@ -14,4 +14,11 @@ User Function ZPROD_CAD()
     Local nStockAct := 0                // Estoque atual
     Local lActive   := .T.              // Produto ativo/inativo
 
+    //Entrada de dados do Usúario
+    cCode := Alltrim(InputBox("Código do Produto", "Digite o código único do produto: ", ""))
+    If cCode == ""
+        MsgStop("Código do Produto é obrigatorio!")
+        Return
+    Endif
+    
 Return ZPROD_CAD
