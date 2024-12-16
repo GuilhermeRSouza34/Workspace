@@ -44,5 +44,28 @@ Static Function ZCONTA_Incluir(aContas)
         Return
     EndIf
 
-    
+    dVencimento := InputBoxDate("Informe a data de vencimento:", "Data de Vencimento")
+    If Empty(dVencimento)
+        MsgStop("A data de vencimento é obrigatória!")
+        Return
+    EndIf
+
+    nValor := Val(InputBox("Informe o valor da conta:", "Valor"))
+    If nValor <= 0
+        MsgStop("O valor da conta deve ser maior que zero!")
+        Return
+    EndIf
+
+    // Verifica duplicidade
+    If aScan(aContas, {|x| x[1] == cFornecedor .and. x[2] == dVencimento}) > 0
+        MsgStop("Já existe um lançamento para este fornecedor e data!")
+        Return
+    EndIf
+
+    // Adiciona o lançamento no array
+    aAdd(aContas, {cFornecedor, dVencimento, nValor})
+    MsgInfo("Lançamento incluído com sucesso!")
+
+Return
+
 
