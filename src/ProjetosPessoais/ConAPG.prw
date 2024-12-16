@@ -68,4 +68,28 @@ Static Function ZCONTA_Incluir(aContas)
 
 Return
 
+// Função para listar os lançamentos
+Static Function ZCONTA_Listar(aContas)
+    Local cRelatorio := ""
+    Local nLinha     := 1
+
+    // Verifica se há lançamentos
+    If Empty(aContas)
+        MsgInfo("Não há lançamentos cadastrados.")
+        Return
+    EndIf
+
+    // Monta o relatório
+    cRelatorio += "Lançamentos de Contas a Pagar" + CRLF + StrRepeat("-", 40) + CRLF
+    cRelatorio += PadR("Fornecedor", 20) + PadR("Vencimento", 12) + "Valor" + CRLF
+    cRelatorio += StrRepeat("-", 40) + CRLF
+
+    For Each aConta In aContas
+        cRelatorio += PadR(aConta[1], 20) + DTOC(aConta[2]) + "  " + Transform(aConta[3], "@E 999,999.99") + CRLF
+    Next
+
+    // Exibe o relatório
+    MsgInfo(cRelatorio)
+
+Return
 
