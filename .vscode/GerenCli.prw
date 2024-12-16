@@ -1,5 +1,6 @@
 #INCLUDE "protheus.ch"
 #INCLUDE "PRTOPDEF.CH"
+#INCLUDE "SQL.CH"
 
 // Função principal
 User Function SistemaClientes()
@@ -81,3 +82,32 @@ Static Function BuscarCliente()
     Return
 EndFunc
 
+// Função para atualizar o endereço de um cliente
+Static Function AtualizarEndereco()
+    Local cCodigo := ""
+    Local cNovoEndereco := ""
+    Local oSql := SQLCreate()
+
+    // Captura o código do cliente
+    cCodigo := InputBox("Informe o código do cliente para atualizar o endereço:")
+    If Empty(cCodigo)
+        MsgStop("Código não pode ser vazio.", "Erro")
+        Return
+    EndIf
+
+    // Captura o novo endereço
+    cNovoEndereco := InputBox("Informe o novo endereço:")
+    If Empty(cNovoEndereco)
+        MsgStop("Endereço não pode ser vazio.", "Erro")
+        Return
+    EndIf
+
+    // Atualiza o endereço no banco
+    If oSql:Exec("UPDATE SA101 SET C1_END = '" + cNovoEndereco + "' WHERE C1_CODIGO = '" + cCodigo + "'")
+        MsgInfo("Endereço atualizado com sucesso.", "Sucesso")
+    Else
+        MsgStop("Erro ao atualizar o endereço.", "Erro")
+    EndIf
+
+    Return
+EndFunc
