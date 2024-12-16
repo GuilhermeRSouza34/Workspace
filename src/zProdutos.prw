@@ -20,5 +20,32 @@ User Function ZPROD_CAD()
         MsgStop("Código do Produto é obrigatorio!")
         Return
     Endif
-    
+
+    cName := Alltrim(InputBox("Nome do Produto", "Digite o nome do produto: ", ""))
+    If cName == ""
+        MsgStop("Nome do Produto é obrigatório!")
+        Return
+    Endif
+
+    cDesc     := Alltrim(InputBox("Descrição do Produto", "Adicione uma descrição breve:", ""))
+    cCat      := Alltrim(InputBox("Categoria", "Digite a categoria do produto:", ""))
+    nPrice    := StrToNum(InputBox("Preço do Produto", "Digite o preço (ex: 10.50):", "0.00"))
+    nStockMin := Val(InputBox("Estoque Mínimo", "Digite a quantidade mínima em estoque:", "0"))
+    nStockAct := Val(InputBox("Estoque Atual", "Digite a quantidade atual em estoque:", "0"))
+    lActive   := MsgYesNo("Produto ativo?", "Deseja marcar este produto como ativo?")
+
+    // Adiciona o produto ao array
+    aAdd(aProducts, {cCode, cName, cDesc, cCat, nPrice, nStockMin, nStockAct, lActive})
+
+    // Confirmação
+    MsgInfo("Produto cadastrado com sucesso!")
+
+    // Exibe os produtos cadastrados
+    If !Empty(aProducts)
+        Alert("Produtos cadastrados: " + aLineBreak() + aArrayToStr(aProducts))
+    EndIf
+
+    Return
+EndFunc
+
 Return ZPROD_CAD
