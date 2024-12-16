@@ -28,5 +28,21 @@ cOpcao := Menu("Sistema de Contas a Pagar", ;
             Exit
         EndCase
     EndWhile
+
 Return
+
+// Função para incluir um novo lançamento
+Static Function ZCONTA_Incluir(aContas)
+    Local cFornecedor := ""       // Nome do Fornecedor
+    Local dVencimento := CTOD("") // Data de vencimento
+    LOcal nValor      := 0.00     // Valor da conta
+
+    // Solicita os Dados do Lançamento
+    cFornecedor := InputBox("Informe o nome do fornecedor:", "Incluir Lançamento", "Fornecedor", "")
+    If Empty(cFornecedor)
+        MsgStop("O nome do fornecedor é obrigatorio!")
+        Return
+    EndIf
+
+    
 
