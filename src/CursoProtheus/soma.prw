@@ -1,5 +1,5 @@
-#INCLUDE "protheus.ch"
 #INCLUDE "PRTOPDEF.CH"
+#INCLUDE "protheus.ch"
 
 User Function soma()
 local nNum1 := 20
