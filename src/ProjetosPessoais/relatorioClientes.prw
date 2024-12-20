@@ -1,4 +1,3 @@
-#Include "PROTOPDEF.CH"
 #Include "TOTVS.ch"
 
 User Function RelatorioClientes()
