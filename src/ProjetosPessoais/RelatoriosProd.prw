@@ -1,6 +1,6 @@
 #Include "TOTVS.ch"
 
-User Function RelatorioProdutos()
+User Function RelatorioProdutosUnico()
     Local aArea := FWGetArea()
     Local cArqRel := "RelatorioProdutos.txt"
     Local nHandle := FCreate(cArqRel)
