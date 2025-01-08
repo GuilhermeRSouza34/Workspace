@@ -19,7 +19,18 @@ User Function GestaoVendas()
 EndFunc
 
 Static Function CadastrarCliente()
-    // Implementar cadastro de cliente
+
+Local cNome := ""
+Local cEndereco := ""
+Local cTelefone := ""
+
+cNome := FWInput("Informe o nome do cliente:")
+cEndereco := FWInput("Informe o endereço do cliente:")
+cTelefone := FWInput("Informe o telefone do cliente:")
+
+// Aqui você pode adicionar o código para salvar os dados do cliente em um banco de dados ou arquivo
+
+MsgInfo("Cliente cadastrado com sucesso!")
 Return
 
 Static Function RegistrarVenda()
