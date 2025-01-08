@@ -54,3 +54,31 @@ Return
 Static Function GerarRelatorioVendas()
     // Implementar geração de relatório de vendas
 Return
+Local aVendas := {}
+Local cRelatorio := ""
+Local i := 0
+
+// Aqui você pode adicionar o código para carregar os dados das vendas de um banco de dados ou arquivo
+// Exemplo de dados fictícios
+aAdd(aVendas, {"Produto A", 10, 5.0})
+aAdd(aVendas, {"Produto B", 2, 15.0})
+aAdd(aVendas, {"Produto C", 1, 50.0})
+
+cRelatorio := "Relatório de Vendas" + CRLF + CRLF
+cRelatorio += "Produto     Quantidade     Preço Unitário     Total" + CRLF
+cRelatorio += Replicate("-", 50) + CRLF
+
+For i := 1 To Len(aVendas)
+    Local cProduto := aVendas[i][1]
+    Local nQuantidade := aVendas[i][2]
+    Local nPreco := aVendas[i][3]
+    Local nTotal := nQuantidade * nPreco
+
+    cRelatorio += PadR(cProduto, 12) + ;
+                    PadR(Str(nQuantidade), 12) + ;
+                    PadR(Transform(nPreco, "@E 999,999.99"), 16) + ;
+                    Transform(nTotal, "@E 999,999.99") + CRLF
+Next
+
+MsgInfo(cRelatorio)
+Return
