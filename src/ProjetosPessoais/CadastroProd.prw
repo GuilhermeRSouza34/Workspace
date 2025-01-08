@@ -74,5 +74,28 @@ Static Function RegistrarMovimentacao()
 Return
 
 Static Function GerarRelatorio()
-	// Implementar geração de relatório de movimentação
+    Local cRelatorio := ""
+    Local nTotalProdutos := 0
+
+    DbUseArea(.T., "TOPCONN", "SB1", "SB1", .T., .T.)
+    DbGoTop()
+
+    cRelatorio += "Código    Descrição                          Preço      Estoque" + CRLF
+    cRelatorio += Replicate("-", 60) + CRLF
+
+    While !Eof()
+        cRelatorio += PadR(FIELD->B1_COD, 10) + " " + ;
+                        adR(FIELD->B1_DESC, 30) + " " + ;
+                        PadL(Str(FIELD->B1_PRV1, 10, 2), 10) + " " + ;
+                        PadL(Str(FIELD->B1_ESTQ, 10), 10) + CRLF
+        nTotalProdutos++
+        DbSkip()
+    EndDo
+
+    DbCloseArea()
+
+    cRelatorio += Replicate("-", 60) + CRLF
+    cRelatorio += "Total de Produtos: " + Str(nTotalProdutos, 10) + CRLF
+
+    MemoEdit(cRelatorio, "Relatório de Produtos")
 Return
