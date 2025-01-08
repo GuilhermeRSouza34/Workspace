@@ -34,7 +34,21 @@ MsgInfo("Cliente cadastrado com sucesso!")
 Return
 
 Static Function RegistrarVenda()
-    // Implementar registro de venda
+
+Local cProduto := ""
+Local nQuantidade := 0
+Local nPreco := 0.0
+Local nTotal := 0.0
+
+cProduto := FWInput("Informe o nome do produto:")
+nQuantidade := Val(FWInput("Informe a quantidade:"))
+nPreco := Val(FWInput("Informe o preço unitário:"))
+
+nTotal := nQuantidade * nPreco
+
+// Aqui você pode adicionar o código para salvar os dados da venda em um banco de dados ou arquivo
+
+MsgInfo("Venda registrada com sucesso! Total: " + Transform(nTotal, "@E 999,999.99"))
 Return
 
 Static Function GerarRelatorioVendas()
