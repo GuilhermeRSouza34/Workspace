@@ -1,18 +1,21 @@
 #include "Protheus.ch"
 #include "TopConn.ch"
+#include "PRTOPDEF.CH"
 #include "Totvs.ch"
+#include "TTalk.ch"
 
 // Função Principal
 User Function ZZCRUD()
     Local cOpcao := ""
 
-    while cOpcao != "5"
+    while cOpcao != "6"
         cOpcao := MsgBox("Escolha uma opção: " + CRLF + ;
                         "1. Criar Tabela" + CRLF + ;
                         "2. Inserir Registro" + CRLF + ;
                         "3. Consultar Registros" + CRLF + ;
                         "4. Editar Registro" + CRLF + ;
-                        "5. Sair", "Menu CRUD", , 1)
+                        "5. Excluir Registro" + CRLF + ;
+                        "6. Sair", "Menu CRUD", , 1)
         Do Case
             Case cOpcao == "1"
                 CriaTabela()
@@ -23,6 +26,8 @@ User Function ZZCRUD()
             Case cOpcao == "4"
                 EditarRegistro()
             Case cOpcao == "5"
+                ExcluirRegistro()
+            Case cOpcao == "6"
                 MsgInfo("Saindo...", "Aviso")
             Otherwise
                 MsgStop("Opção inválida!", "Erro")
@@ -53,6 +58,11 @@ Static Function InserirRegistro()
     // Campos para solicitar dados aos usuarios
     cCodigo := InputBox("Informe o código:", "Inserir Registro")
     cDescricao := InputBox("Informe a descrição:", "Inserir Registro")
+
+    If Empty(cCodigo) .Or. Empty(cDescricao)
+        MsgStop("Código e Descrição são obrigatórios!", "Erro")
+        Return
+    EndIf
 
     DbUseArea(.T., "TOPCONN", "ZZTESTE", .T., .T. )
     DbAppend()
@@ -89,7 +99,7 @@ Return
 // Função para editar um registro na tabela
 Static Function EditarRegistro()
     Local cCodigo := ""
-    Local cDescricao := ""
+    Local cNovaDescricao := ""
 
     // Solicitar código do registro a ser editado
     cCodigo := InputBox("Informe o código do registro a ser editado:", "Editar Registro")
@@ -99,6 +109,11 @@ Static Function EditarRegistro()
     Do While !Eof()
         If Field->ZZCOD == cCodigo
             cNovaDescricao := InputBox("Informe a nova descrição:", "Editar Registro")
+            If Empty(cNovaDescricao)
+                MsgStop("Descrição não pode ser vazia!", "Erro")
+                DbCloseArea()
+                Return
+            EndIf
             Field->ZZDESC := cNovaDescricao
             DbCommit()
             MsgInfo("Registro editado com sucesso!", "Confirmação")
@@ -112,7 +127,7 @@ Static Function EditarRegistro()
     MsgStop("Registro não encontrado!", "Erro")
 Return
 
-// Função para excluir uym registro
+// Função para excluir um registro
 Static Function ExcluirRegistro()
     Local cCodigo := ""
 
@@ -122,7 +137,7 @@ Static Function ExcluirRegistro()
     DbUseArea(.T., "TOPCONN", "ZZTESTE", .T., .T. )
     DbGoTop()
 
-    Do While!Eof()
+    Do While !Eof()
         If Field->ZZCOD == cCodigo
             DbDelete()
             DbCommit()
@@ -131,9 +146,8 @@ Static Function ExcluirRegistro()
             Return
         EndIf
         DbSkip()
-    EndWhile
-    
+    EndDo
+
     DbCloseArea()
     MsgStop("Registro não encontrado!", "Erro")
 Return
-    
