@@ -1,0 +1,143 @@
+#include "protheus.ch"
+
+/**
+ * Programa de Controle de Pedidos
+ */
+User Function Main()
+    Local cOpcao := ""
+    Local aProdutos := {} // Lista de produtos cadastrados
+    Local aPedidos := {}  // Lista de pedidos registrados
+    
+    Do While cOpcao != "4"
+        cOpcao := MenuPrincipal()
+        
+        Do Case
+            Case cOpcao == "1"
+                CadastroProduto(aProdutos)
+            Case cOpcao == "2"
+                RegistroPedido(aProdutos, aPedidos)
+            Case cOpcao == "3"
+                ConsultaPedidos(aPedidos)
+            Case cOpcao == "4"
+                MsgInfo("Saindo do sistema. Até mais!", "Encerrando")
+            Otherwise
+                MsgStop("Opção inválida. Tente novamente.", "Erro")
+        End Case
+    End Do
+
+Return
+
+/**
+ * Menu Principal
+ */
+Static Function MenuPrincipal()
+    Local cOpcao := ""
+    
+    cOpcao := aChoice("Menu Principal", { ;
+        "1 - Cadastrar Produto", ;
+        "2 - Registrar Pedido", ;
+        "3 - Consultar Pedidos", ;
+        "4 - Sair" ;
+    }, "Escolha uma opção:")
+
+Return cOpcao
+
+/**
+ * Cadastro de Produtos
+ */
+Static Function CadastroProduto(aProdutos)
+    Local cNome := ""
+    Local nPreco := 0.0
+    
+    cNome := InputBox("Digite o nome do produto:", "Cadastro de Produto")
+    If Empty(cNome)
+        MsgStop("Nome do produto não pode estar vazio.", "Erro")
+        Return
+    EndIf
+    
+    nPreco := Val(InputBox("Digite o preço do produto (ex: 10.50):", "Cadastro de Produto"))
+    If nPreco <= 0
+        MsgStop("O preço deve ser maior que zero.", "Erro")
+        Return
+    EndIf
+    
+    // Adiciona o produto na lista
+    AAdd(aProdutos, { cNome, nPreco })
+    MsgInfo("Produto cadastrado com sucesso!", "Cadastro de Produto")
+    
+Return
+
+/**
+ * Registro de Pedidos
+ */
+Static Function RegistroPedido(aProdutos, aPedidos)
+    Local cProduto := ""
+    Local nQuantidade := 0
+    Local cConfirmar := ""
+    Local nTotal := 0.0
+    Local aProduto := {}
+    
+    If Len(aProdutos) == 0
+        MsgStop("Nenhum produto cadastrado. Cadastre produtos antes de registrar pedidos.", "Erro")
+        Return
+    EndIf
+    
+    // Mostra produtos disponíveis
+    Local cListaProdutos := "Produtos disponíveis:\n" + PadR("Nome", 20) + "Preço\n" + Replicate("-", 30) + CRLF
+    For Each aProduto In aProdutos
+        cListaProdutos += PadR(aProduto[1], 20) + Transform(aProduto[2], "@E 999.99") + CRLF
+    Next
+    MsgInfo(cListaProdutos, "Lista de Produtos")
+    
+    cProduto := InputBox("Digite o nome do produto:", "Registro de Pedido")
+    If Empty(cProduto)
+        MsgStop("O nome do produto não pode estar vazio.", "Erro")
+        Return
+    EndIf
+    
+    // Busca o produto na lista
+    For Each aProduto In aProdutos
+        If aProduto[1] == cProduto
+            Exit
+        EndIf
+    Next
+    If Empty(aProduto)
+        MsgStop("Produto não encontrado.", "Erro")
+        Return
+    EndIf
+    
+    nQuantidade := Val(InputBox("Digite a quantidade:", "Registro de Pedido"))
+    If nQuantidade <= 0
+        MsgStop("A quantidade deve ser maior que zero.", "Erro")
+        Return
+    EndIf
+    
+    // Confirma o pedido
+    nTotal := aProduto[2] * nQuantidade
+    cConfirmar := MsgYesNo("Produto: " + aProduto[1] + CRLF + ;
+                            "Quantidade: " + Str(nQuantidade) + CRLF + ;
+                            "Total: R$ " + Transform(nTotal, "@E 999.99") + CRLF + ;
+                            "Deseja confirmar o pedido?")
+    If cConfirmar
+        AAdd(aPedidos, { aProduto[1], nQuantidade, nTotal })
+        MsgInfo("Pedido registrado com sucesso!", "Registro de Pedido")
+    EndIf
+    
+Return
+
+/**
+ * Consulta de Pedidos
+ */
+Static Function ConsultaPedidos(aPedidos)
+    If Len(aPedidos) == 0
+        MsgStop("Nenhum pedido registrado.", "Consulta de Pedidos")
+        Return
+    EndIf
+    
+    Local cListaPedidos := "Pedidos registrados:\n" + PadR("Produto", 20) + "Quantidade" + PadR("Total", 10) + CRLF + Replicate("-", 40) + CRLF
+    For Each aPedido In aPedidos
+        cListaPedidos += PadR(aPedido[1], 20) + Str(aPedido[2]) + PadR(Transform(aPedido[3], "@E 999.99"), 10) + CRLF
+    Next
+    MsgInfo(cListaPedidos, "Consulta de Pedidos")
+    
+Return
