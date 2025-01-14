@@ -75,6 +75,7 @@ Static Function RegistroPedido(aProdutos, aPedidos)
     Local nQuantidade := 0
     Local cConfirmar := ""
     Local nTotal := 0.0
+    Local aProduto := {}
     
     If Len(aProdutos) == 0
         MsgStop("Nenhum produto cadastrado. Cadastre produtos antes de registrar pedidos.", "Erro")
@@ -82,8 +83,11 @@ Static Function RegistroPedido(aProdutos, aPedidos)
     EndIf
     
     // Mostra produtos disponíveis
-    MsgInfo("Produtos disponíveis:\n" + PadR("Nome", 20) + "Preço\n" + Replicate("-", 30) + ;
-            CRLF + ArrayReduce(aProdutos, {|x| PadR(x[1], 20) + Transform(x[2], "@E 999.99") + CRLF }), "Lista de Produtos")
+    Local cListaProdutos := "Produtos disponíveis:\n" + PadR("Nome", 20) + "Preço\n" + Replicate("-", 30) + CRLF
+    For Each aProduto In aProdutos
+        cListaProdutos += PadR(aProduto[1], 20) + Transform(aProduto[2], "@E 999.99") + CRLF
+    Next
+    MsgInfo(cListaProdutos, "Lista de Produtos")
     
     cProduto := InputBox("Digite o nome do produto:", "Registro de Pedido")
     If Empty(cProduto)
@@ -92,7 +96,11 @@ Static Function RegistroPedido(aProdutos, aPedidos)
     EndIf
     
     // Busca o produto na lista
-    Local aProduto := ArraySearch(aProdutos, {|x| x[1] == cProduto})
+    For Each aProduto In aProdutos
+        If aProduto[1] == cProduto
+            Exit
+        EndIf
+    Next
     If Empty(aProduto)
         MsgStop("Produto não encontrado.", "Erro")
         Return
@@ -110,7 +118,7 @@ Static Function RegistroPedido(aProdutos, aPedidos)
                             "Quantidade: " + Str(nQuantidade) + CRLF + ;
                             "Total: R$ " + Transform(nTotal, "@E 999.99") + CRLF + ;
                             "Deseja confirmar o pedido?")
-    If cConfirmar == "Y"
+    If cConfirmar
         AAdd(aPedidos, { aProduto[1], nQuantidade, nTotal })
         MsgInfo("Pedido registrado com sucesso!", "Registro de Pedido")
     EndIf
@@ -126,7 +134,10 @@ Static Function ConsultaPedidos(aPedidos)
         Return
     EndIf
     
-    MsgInfo("Pedidos registrados:\n" + PadR("Produto", 20) + "Quantidade" + PadR("Total", 10) + CRLF + Replicate("-", 40) + ;
-            CRLF + ArrayReduce(aPedidos, {|x| PadR(x[1], 20) + Str(x[2]) + PadR(Transform(x[3], "@E 999.99"), 10) + CRLF }), "Consulta de Pedidos")
+    Local cListaPedidos := "Pedidos registrados:\n" + PadR("Produto", 20) + "Quantidade" + PadR("Total", 10) + CRLF + Replicate("-", 40) + CRLF
+    For Each aPedido In aPedidos
+        cListaPedidos += PadR(aPedido[1], 20) + Str(aPedido[2]) + PadR(Transform(aPedido[3], "@E 999.99"), 10) + CRLF
+    Next
+    MsgInfo(cListaPedidos, "Consulta de Pedidos")
     
 Return
