@@ -1,0 +1,100 @@
+#include "protheus.ch"
+
+/**
+ * Programa de Controle de Pedidos
+ */
+User Function Main()
+    Local cOpcao := ""
+    Local aProdutos := {} // Lista de produtos cadastrados
+    Local aPedidos := {}  // Lista de pedidos registrados
+    
+    Do While cOpcao != "4"
+        cOpcao := MenuPrincipal()
+        
+        Do Case
+            Case cOpcao == "1"
+                CadastroProduto(aProdutos)
+            Case cOpcao == "2"
+                RegistroPedido(aProdutos, aPedidos)
+            Case cOpcao == "3"
+                ConsultaPedidos(aPedidos)
+            Case cOpcao == "4"
+                MsgInfo("Saindo do sistema. Até mais!", "Encerrando")
+            Otherwise
+                MsgStop("Opção inválida. Tente novamente.", "Erro")
+        End Case
+    End Do
+
+Return
+
+/**
+ * Menu Principal
+ */
+Static Function MenuPrincipal()
+    Local cOpcao := ""
+    
+    cOpcao := aChoice("Menu Principal", { ;
+        "1 - Cadastrar Produto", ;
+        "2 - Registrar Pedido", ;
+        "3 - Consultar Pedidos", ;
+        "4 - Sair" ;
+    }, "Escolha uma opção:")
+
+Return cOpcao
+
+/**
+ * Cadastro de Produtos
+ */
+Static Function CadastroProduto(aProdutos)
+    Local cNome := ""
+    Local nPreco := 0.0
+    
+    cNome := InputBox("Cadastro de Produto", "Informe o nome do produto:")
+    nPreco := Val(InputBox("Cadastro de Produto", "Informe o preço do produto:"))
+    
+    AAdd(aProdutos, {cNome, nPreco})
+    MsgInfo("Produto cadastrado com sucesso!", "Cadastro")
+Return
+
+/**
+ * Registro de Pedidos
+ */
+Static Function RegistroPedido(aProdutos, aPedidos)
+    Local cProduto := ""
+    Local nQuantidade := 0
+    Local nIndex := 0
+    
+    If Len(aProdutos) == 0
+        MsgStop("Nenhum produto cadastrado. Cadastre um produto primeiro.", "Erro")
+        Return
+    EndIf
+    
+    cProduto := aChoice("Registro de Pedido", aProdutos, "Escolha um produto:")
+    nQuantidade := Val(InputBox("Registro de Pedido", "Informe a quantidade:"))
+    
+    nIndex := Ascan(aProdutos, { |x| x[1] == cProduto })
+    If nIndex > 0
+        AAdd(aPedidos, {cProduto, nQuantidade, aProdutos[nIndex][2] * nQuantidade})
+        MsgInfo("Pedido registrado com sucesso!", "Registro")
+    Else
+        MsgStop("Produto não encontrado.", "Erro")
+    EndIf
+Return
+
+/**
+ * Consulta de Pedidos
+ */
+Static Function ConsultaPedidos(aPedidos)
+    Local cRelatorio := "Pedidos Registrados:" + CRLF + CRLF
+    Local nTotal := 0.0
+    
+    For Each aPedido In aPedidos
+        cRelatorio += "Produto: " + aPedido[1] + CRLF
+        cRelatorio += "Quantidade: " + Str(aPedido[2]) + CRLF
+        cRelatorio += "Total: " + Transform(aPedido[3], "@E 999,999.99") + CRLF + CRLF
+        nTotal += aPedido[3]
+    Next
+    
+    cRelatorio += "Total Geral: " + Transform(nTotal, "@E 999,999.99")
+    MsgInfo(cRelatorio, "Consulta de Pedidos")
+Return

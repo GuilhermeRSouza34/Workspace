@@ -1,0 +1,99 @@
+#include "protheus.ch"
+
+/**
+ * Programa de Controle de Funcionários
+ */
+User Function Main()
+    Local cOpcao := ""
+    Local aFuncionarios := {} // Lista de funcionários cadastrados
+    Local aHorasTrabalhadas := {} // Lista de horas trabalhadas registradas
+    
+    Do While cOpcao != "4"
+        cOpcao := MenuPrincipal()
+        
+        Do Case
+            Case cOpcao == "1"
+                CadastroFuncionario(aFuncionarios)
+            Case cOpcao == "2"
+                RegistroHoras(aFuncionarios, aHorasTrabalhadas)
+            Case cOpcao == "3"
+                ConsultaHoras(aHorasTrabalhadas)
+            Case cOpcao == "4"
+                MsgInfo("Saindo do sistema. Até mais!", "Encerrando")
+            Otherwise
+                MsgStop("Opção inválida. Tente novamente.", "Erro")
+        End Case
+    End Do
+
+Return
+
+/**
+ * Menu Principal
+ */
+Static Function MenuPrincipal()
+    Local cOpcao := ""
+    
+    cOpcao := aChoice("Menu Principal", { ;
+        "1 - Cadastrar Funcionário", ;
+        "2 - Registrar Horas Trabalhadas", ;
+        "3 - Consultar Horas Trabalhadas", ;
+        "4 - Sair" ;
+    }, "Escolha uma opção:")
+
+Return cOpcao
+
+/**
+ * Cadastro de Funcionários
+ */
+Static Function CadastroFuncionario(aFuncionarios)
+    Local cNome := ""
+    Local cCargo := ""
+    
+    cNome := InputBox("Cadastro de Funcionário", "Informe o nome do funcionário:")
+    cCargo := InputBox("Cadastro de Funcionário", "Informe o cargo do funcionário:")
+    
+    AAdd(aFuncionarios, {cNome, cCargo})
+    MsgInfo("Funcionário cadastrado com sucesso!", "Cadastro")
+Return
+
+/**
+ * Registro de Horas Trabalhadas
+ */
+Static Function RegistroHoras(aFuncionarios, aHorasTrabalhadas)
+    Local cFuncionario := ""
+    Local nHoras := 0
+    Local nIndex := 0
+    
+    If Len(aFuncionarios) == 0
+        MsgStop("Nenhum funcionário cadastrado. Cadastre um funcionário primeiro.", "Erro")
+        Return
+    EndIf
+    
+    cFuncionario := aChoice("Registro de Horas Trabalhadas", aFuncionarios, "Escolha um funcionário:")
+    nHoras := Val(InputBox("Registro de Horas Trabalhadas", "Informe a quantidade de horas trabalhadas:"))
+    
+    nIndex := Ascan(aFuncionarios, { |x| x[1] == cFuncionario })
+    If nIndex > 0
+        AAdd(aHorasTrabalhadas, {cFuncionario, nHoras})
+        MsgInfo("Horas trabalhadas registradas com sucesso!", "Registro")
+    Else
+        MsgStop("Funcionário não encontrado.", "Erro")
+    EndIf
+Return
+
+/**
+ * Consulta de Horas Trabalhadas
+ */
+Static Function ConsultaHoras(aHorasTrabalhadas)
+    Local cRelatorio := "Horas Trabalhadas:" + CRLF + CRLF
+    Local nTotal := 0
+    
+    For Each aHora In aHorasTrabalhadas
+        cRelatorio += "Funcionário: " + aHora[1] + CRLF
+        cRelatorio += "Horas: " + Str(aHora[2]) + CRLF + CRLF
+        nTotal += aHora[2]
+    Next
+    
+    cRelatorio += "Total de Horas: " + Str(nTotal)
+    MsgInfo(cRelatorio, "Consulta de Horas Trabalhadas")
+Return
