@@ -1,0 +1,110 @@
+#include "protheus.ch"
+
+/**
+ * Programa de Controle de Projetos
+ */
+User Function Main()
+    Local cOpcao := ""
+    Local aProjetos := {} // Lista de projetos cadastrados
+    Local aTarefas := {}  // Lista de tarefas registradas
+    
+    Do While cOpcao != "4"
+        cOpcao := MenuPrincipal()
+        
+        Do Case
+            Case cOpcao == "1"
+                CadastroProjeto(aProjetos)
+            Case cOpcao == "2"
+                RegistroTarefa(aProjetos, aTarefas)
+            Case cOpcao == "3"
+                ConsultaProgresso(aProjetos, aTarefas)
+            Case cOpcao == "4"
+                MsgInfo("Saindo do sistema. Até mais!", "Encerrando")
+            Otherwise
+                MsgStop("Opção inválida. Tente novamente.", "Erro")
+        End Case
+    End Do
+
+Return
+
+/**
+ * Menu Principal
+ */
+Static Function MenuPrincipal()
+    Local cOpcao := ""
+    
+    cOpcao := aChoice("Menu Principal", { ;
+        "1 - Cadastrar Projeto", ;
+        "2 - Registrar Tarefa", ;
+        "3 - Consultar Progresso", ;
+        "4 - Sair" ;
+    }, "Escolha uma opção:")
+
+Return cOpcao
+
+/**
+ * Cadastro de Projetos
+ */
+Static Function CadastroProjeto(aProjetos)
+    Local cNome := ""
+    Local cDescricao := ""
+    Local dDataInicio := Date()
+    
+    cNome := InputBox("Cadastro de Projeto", "Informe o nome do projeto:")
+    cDescricao := InputBox("Cadastro de Projeto", "Informe a descrição do projeto:")
+    
+    AAdd(aProjetos, {cNome, cDescricao, dDataInicio})
+    MsgInfo("Projeto cadastrado com sucesso!", "Cadastro")
+Return
+
+/**
+ * Registro de Tarefas
+ */
+Static Function RegistroTarefa(aProjetos, aTarefas)
+    Local cProjeto := ""
+    Local cDescricao := ""
+    Local cResponsavel := ""
+    Local cStatus := ""
+    Local nIndex := 0
+    
+    If Len(aProjetos) == 0
+        MsgStop("Nenhum projeto cadastrado. Cadastre um projeto primeiro.", "Erro")
+        Return
+    EndIf
+    
+    cProjeto := aChoice("Registro de Tarefa", aProjetos, "Escolha um projeto:")
+    cDescricao := InputBox("Registro de Tarefa", "Informe a descrição da tarefa:")
+    cResponsavel := InputBox("Registro de Tarefa", "Informe o responsável pela tarefa:")
+    cStatus := InputBox("Registro de Tarefa", "Informe o status da tarefa (Pendente/Concluída):")
+    
+    nIndex := Ascan(aProjetos, { |x| x[1] == cProjeto })
+    If nIndex > 0
+        AAdd(aTarefas, {cProjeto, cDescricao, cResponsavel, cStatus})
+        MsgInfo("Tarefa registrada com sucesso!", "Registro")
+    Else
+        MsgStop("Projeto não encontrado.", "Erro")
+    EndIf
+Return
+
+/**
+ * Consulta de Progresso
+ */
+Static Function ConsultaProgresso(aProjetos, aTarefas)
+    Local cRelatorio := "Progresso dos Projetos:" + CRLF + CRLF
+    
+    For Each aProjeto In aProjetos
+        cRelatorio += "Projeto: " + aProjeto[1] + CRLF
+        cRelatorio += "Descrição: " + aProjeto[2] + CRLF
+        cRelatorio += "Data de Início: " + DToC(aProjeto[3]) + CRLF + CRLF
+        
+        For Each aTarefa In aTarefas
+            If aTarefa[1] == aProjeto[1]
+                cRelatorio += "  Tarefa: " + aTarefa[2] + CRLF
+                cRelatorio += "  Responsável: " + aTarefa[3] + CRLF
+                cRelatorio += "  Status: " + aTarefa[4] + CRLF + CRLF
+            EndIf
+        Next
+    Next
+    
+    MsgInfo(cRelatorio, "Consulta de Progresso")
+Return
