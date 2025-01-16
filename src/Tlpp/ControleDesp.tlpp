@@ -1,0 +1,108 @@
+#include "protheus.ch"
+
+/**
+ * Programa de Controle de Despesas Pessoais
+ */
+User Function Main()
+    Local cOpcao := ""
+    Local aCategorias := {} // Lista de categorias de despesas cadastradas
+    Local aDespesas := {}   // Lista de despesas registradas
+    
+    Do While cOpcao != "4"
+        cOpcao := MenuPrincipal()
+        
+        Do Case
+            Case cOpcao == "1"
+                CadastroCategoria(aCategorias)
+            Case cOpcao == "2"
+                RegistroDespesa(aCategorias, aDespesas)
+            Case cOpcao == "3"
+                ConsultaDespesas(aCategorias, aDespesas)
+            Case cOpcao == "4"
+                MsgInfo("Saindo do sistema. Até mais!", "Encerrando")
+            Otherwise
+                MsgStop("Opção inválida. Tente novamente.", "Erro")
+        End Case
+    End Do
+
+Return
+
+/**
+ * Menu Principal
+ */
+Static Function MenuPrincipal()
+    Local cOpcao := ""
+    
+    cOpcao := aChoice("Menu Principal", { ;
+        "1 - Cadastrar Categoria de Despesa", ;
+        "2 - Registrar Despesa", ;
+        "3 - Consultar Despesas", ;
+        "4 - Sair" ;
+    }, "Escolha uma opção:")
+
+Return cOpcao
+
+/**
+ * Cadastro de Categorias de Despesas
+ */
+Static Function CadastroCategoria(aCategorias)
+    Local cNome := ""
+    
+    cNome := InputBox("Cadastro de Categoria", "Informe o nome da categoria:")
+    
+    AAdd(aCategorias, cNome)
+    MsgInfo("Categoria cadastrada com sucesso!", "Cadastro")
+Return
+
+/**
+ * Registro de Despesas
+ */
+Static Function RegistroDespesa(aCategorias, aDespesas)
+    Local cCategoria := ""
+    Local nValor := 0.0
+    Local dData := Date()
+    Local nIndex := 0
+    
+    If Len(aCategorias) == 0
+        MsgStop("Nenhuma categoria cadastrada. Cadastre uma categoria primeiro.", "Erro")
+        Return
+    EndIf
+    
+    cCategoria := aChoice("Registro de Despesa", aCategorias, "Escolha uma categoria:")
+    nValor := Val(InputBox("Registro de Despesa", "Informe o valor da despesa:"))
+    
+    nIndex := Ascan(aCategorias, { |x| x == cCategoria })
+    If nIndex > 0
+        AAdd(aDespesas, {cCategoria, nValor, dData})
+        MsgInfo("Despesa registrada com sucesso!", "Registro")
+    Else
+        MsgStop("Categoria não encontrada.", "Erro")
+    EndIf
+Return
+
+/**
+ * Consulta de Despesas
+ */
+Static Function ConsultaDespesas(aCategorias, aDespesas)
+    Local cRelatorio := "Despesas por Categoria:" + CRLF + CRLF
+    Local nTotal := 0.0
+    
+    For Each cCategoria In aCategorias
+        Local nTotalCategoria := 0.0
+        cRelatorio += "Categoria: " + cCategoria + CRLF
+        
+        For Each aDespesa In aDespesas
+            If aDespesa[1] == cCategoria
+                cRelatorio += "  Valor: " + Transform(aDespesa[2], "@E 999,999.99") + CRLF
+                cRelatorio += "  Data: " + DToC(aDespesa[3]) + CRLF
+                nTotalCategoria += aDespesa[2]
+            EndIf
+        Next
+        
+        cRelatorio += "  Total: " + Transform(nTotalCategoria, "@E 999,999.99") + CRLF + CRLF
+        nTotal += nTotalCategoria
+    Next
+    
+    cRelatorio += "Total Geral: " + Transform(nTotal, "@E 999,999.99")
+    MsgInfo(cRelatorio, "Consulta de Despesas")
+Return
