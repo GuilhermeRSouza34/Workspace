@@ -13,6 +13,7 @@ U_Func2()
 
 Alert(cVar2) //Private
 Alert(cVar1) //Local
+Alert(cVar5) //Static
 
 RETURN
 
