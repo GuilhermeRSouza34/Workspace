@@ -66,7 +66,7 @@ Static Function MontaQry(aProdutos, aPedidos)
         ADD(aProdutos, {QRY1->CODIGO, QRY1->DESCRICAO, QRY1->LOCPAD})
         QRY1->(DbSkip())
     EndDo
-
+//
     cQuery += "SELECT DISTINCT           " + ENTER
     cQuery += "B1_COD AS CODIGO,         " + ENTER
     cQuery += "B1_DESC AS DESCRICAO,     " + ENTER
