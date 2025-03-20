@@ -1,0 +1,16 @@
+{
+  "name": "meu-primeiro-poui",
+  "version": "1.0.0",
+  "description": "Meu primeiro projeto POUI com ADVPL",
+  "scripts": {
+    "start": "po-ui serve",
+    "build": "po-ui build"
+  },
+  "dependencies": {
+    "@po-ui/ng-components": "^14.0.0",
+    "@angular/core": "^14.0.0",
+    "@angular/common": "^14.0.0",
+    "@angular/platform-browser": "^14.0.0",
+    "@angular/router": "^14.0.0"
+  }
+}
