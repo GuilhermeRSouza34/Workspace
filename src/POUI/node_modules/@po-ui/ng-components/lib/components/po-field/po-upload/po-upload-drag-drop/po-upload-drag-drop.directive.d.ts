@@ -1,0 +1,35 @@
+import { EventEmitter } from '@angular/core';
+import { PoI18nPipe } from '../../../../services/po-i18n/po-i18n.pipe';
+import { PoNotificationService } from '../../../../services/po-notification/po-notification.service';
+import { PoUploadLiterals } from '../interfaces/po-upload-literals.interface';
+import * as i0 from "@angular/core";
+export declare class PoUploadDragDropDirective {
+    private i18nPipe;
+    private notification;
+    areaElement: HTMLElement;
+    directoryCompatible: boolean;
+    disabled: boolean;
+    literals: PoUploadLiterals;
+    dragLeave: EventEmitter<any>;
+    dragOver: EventEmitter<any>;
+    fileChange: EventEmitter<any>;
+    timeout: any;
+    private files;
+    private invalidFileType;
+    constructor(i18nPipe: PoI18nPipe, notification: PoNotificationService);
+    onDragLeave(event: any): void;
+    onDragOver(event: any): void;
+    onDrop(event: any): void;
+    private getFilesFromDataTransferItems;
+    private getFilesFromEntry;
+    private getOnlyDirectories;
+    private getOnlyFiles;
+    private readFile;
+    private readDirectory;
+    private readDirectoryEntries;
+    private sendFeedback;
+    private sendFiles;
+    private setPipeArguments;
+    static ɵfac: i0.ɵɵFactoryDeclaration<PoUploadDragDropDirective, never>;
+    static ɵdir: i0.ɵɵDirectiveDeclaration<PoUploadDragDropDirective, "[p-upload-drag-drop]", never, { "areaElement": "p-area-element"; "directoryCompatible": "p-directory-compatible"; "disabled": "p-disabled"; "literals": "p-literals"; }, { "dragLeave": "p-drag-leave"; "dragOver": "p-drag-over"; "fileChange": "p-file-change"; }, never, never, false>;
+}
