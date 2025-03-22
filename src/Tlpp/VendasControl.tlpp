@@ -1,0 +1,223 @@
+#include "tlpp-core.th"
+#include "tlpp-rest.th"
+
+namespace vendas
+
+/*/{Protheus.doc} VendasControl
+Classe para gerenciamento de vendas
+@type class
+@author Guilherme Souza
+@since 2024
+/*/
+class VendasControl
+    private
+        data cCliente as character
+        data cProduto as character
+        data nQuantidade as numeric
+        data nPrecoUnit as numeric
+        data nTotal as numeric
+        data cPedido as character
+        data oEstoque as object
+
+    public
+        method new() as object
+        method setCliente(cCli as character) as logical
+        method setProduto(cProd as character, nQuant as numeric, nPreco as numeric) as logical
+        method validarEstoque() as logical
+        method validarCredito() as logical
+        method gravarPedido() as logical
+        method getDados() as array
+endclass
+
+method new() as object
+    ::oEstoque := estoque.GerenciaEstoque():new("", 0, "S")
+return self
+
+method setCliente(cCli as character) as logical
+    local lRet := .T.
+
+    if empty(cCli)
+        UserException("Cliente nao pode ser vazio")
+    endif
+
+    ::cCliente := cCli
+
+return lRet
+
+method setProduto(cProd as character, nQuant as numeric, nPreco as numeric) as logical
+    local lRet := .T.
+
+    if empty(cProd)
+        UserException("Produto nao pode ser vazio")
+    endif
+
+    if nQuant <= 0
+        UserException("Quantidade deve ser maior que zero")
+    endif
+
+    if nPreco <= 0
+        UserException("Preco deve ser maior que zero")
+    endif
+
+    ::cProduto := cProd
+    ::nQuantidade := nQuant
+    ::nPrecoUnit := nPreco
+    ::nTotal := nQuant * nPreco
+
+return lRet
+
+method validarEstoque() as logical
+    local lRet := .T.
+    local aSaldo := array(0)
+
+    // Verifica saldo em estoque
+    if Select("SB2") == 0
+        UserException("Tabela de saldos nao esta aberta")
+    endif
+
+    SB2->(dbSetOrder(1))
+    if !SB2->(dbSeek(xFilial("SB2") + ::cProduto))
+        UserException("Produto nao encontrado no estoque")
+    endif
+
+    if SB2->B2_QATU < ::nQuantidade
+        UserException("Saldo insuficiente em estoque")
+    endif
+
+return lRet
+
+method validarCredito() as logical
+    local lRet := .T.
+    local nLimite := 0
+
+    // Verifica limite de credito do cliente
+    if Select("SA1") == 0
+        UserException("Tabela de clientes nao esta aberta")
+    endif
+
+    SA1->(dbSetOrder(1))
+    if !SA1->(dbSeek(xFilial("SA1") + ::cCliente))
+        UserException("Cliente nao encontrado")
+    endif
+
+    nLimite := SA1->A1_LC
+    if nLimite < ::nTotal
+        UserException("Cliente sem limite de credito suficiente")
+    endif
+
+return lRet
+
+method gravarPedido() as logical
+    local lRet := .T.
+    local cNumPed := ""
+
+    begin transaction
+        try
+            // Gera numero do pedido
+            cNumPed := GetSXENum("SC5", "C5_NUM")
+            ::cPedido := cNumPed
+
+            // Grava cabeçalho do pedido
+            if RecLock("SC5", .T.)
+                SC5->C5_FILIAL := xFilial("SC5")
+                SC5->C5_NUM    := cNumPed
+                SC5->C5_CLIENTE := ::cCliente
+                SC5->C5_EMISSAO := Date()
+                SC5->C5_CONDPAG := "001"
+                MsUnlock()
+            else
+                UserException("Erro ao bloquear registro de pedido")
+            endif
+
+            // Grava item do pedido
+            if RecLock("SC6", .T.)
+                SC6->C6_FILIAL  := xFilial("SC6")
+                SC6->C6_NUM     := cNumPed
+                SC6->C6_ITEM    := "01"
+                SC6->C6_PRODUTO := ::cProduto
+                SC6->C6_QTDVEN  := ::nQuantidade
+                SC6->C6_PRCVEN  := ::nPrecoUnit
+                SC6->C6_VALOR   := ::nTotal
+                MsUnlock()
+            else
+                UserException("Erro ao bloquear registro de item")
+            endif
+
+            // Atualiza estoque
+            ::oEstoque:setProduto(::cProduto)
+            ::oEstoque:setQuantidade(::nQuantidade)
+            if !::oEstoque:movimentar()
+                UserException("Erro ao atualizar estoque")
+            endif
+
+            ConfirmSX8()
+            end transaction
+
+        catch oError
+            RollBackSX8()
+            discard transaction
+            lRet := .F.
+            UserException(oError:Description)
+        endtry
+
+return lRet
+
+method getDados() as array
+    local aDados := array(6)
+
+    aDados[1] := ::cCliente
+    aDados[2] := ::cProduto
+    aDados[3] := ::nQuantidade
+    aDados[4] := ::nPrecoUnit
+    aDados[5] := ::nTotal
+    aDados[6] := ::cPedido
+
+return aDados
+
+/*/{Protheus.doc} RealizarVenda
+Funcao principal para interface com usuario
+@type function
+@author Guilherme Souza
+@since 2024
+/*/
+user function RealizarVenda()
+    local cCliente as character
+    local cProduto as character
+    local nQuantidade as numeric
+    local nPrecoUnit as numeric
+    local oVendas as object
+    local lSucesso as logical
+
+    // Interface com usuario
+    @ 01, 01 say "Codigo do Cliente: " get cCliente
+    @ 02, 01 say "Codigo do Produto: " get cProduto
+    @ 03, 01 say "Quantidade: " get nQuantidade picture "@E 999999.99"
+    @ 04, 01 say "Preco Unitario: " get nPrecoUnit picture "@E 999999.99"
+    read
+
+    try
+        // Cria objeto e realiza venda
+        oVendas := vendas.VendasControl():new()
+        lSucesso := oVendas:setCliente(cCliente)
+        
+        if lSucesso
+            lSucesso := oVendas:setProduto(cProduto, nQuantidade, nPrecoUnit)
+            if lSucesso
+                lSucesso := oVendas:validarEstoque()
+                if lSucesso
+                    lSucesso := oVendas:validarCredito()
+                    if lSucesso
+                        lSucesso := oVendas:gravarPedido()
+                        if lSucesso
+                            MsgInfo("Venda realizada com sucesso. Pedido: " + oVendas:getDados()[6], "Sucesso")
+                        endif
+                    endif
+                endif
+            endif
+        endif
+
+    catch oError
+        MsgStop(oError:Description, "Erro")
+    endtry
+
+return
