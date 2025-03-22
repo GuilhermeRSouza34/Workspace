@@ -1,0 +1,143 @@
+#include "tlpp-core.th"
+#include "tlpp-rest.th"
+
+namespace clientes
+
+/*/{Protheus.doc} Cliente
+Classe para gerenciamento de clientes
+@type class
+@author Guilherme Souza
+@since 2024
+/*/
+class Cliente
+    private
+        data cCodigo as character
+        data cNome as character
+        data cEndereco as character
+        data cTelefone as character
+        data lAtivo as logical
+
+    public
+        method new(cCod as character) as object
+        method setDados(cNome as character, cEnd as character, cTel as character) as logical
+        method salvar() as logical
+        method excluir() as logical
+        method getDados() as array
+endclass
+
+method new(cCod as character) as object
+    ::cCodigo := cCod
+    ::lAtivo := .T.
+return self
+
+method setDados(cNome as character, cEnd as character, cTel as character) as logical
+    local lRet := .T.
+
+    if empty(cNome)
+        UserException("Nome do cliente nao pode ser vazio")
+    endif
+
+    ::cNome := cNome
+    ::cEndereco := cEnd
+    ::cTelefone := cTel
+
+return lRet
+
+method salvar() as logical
+    local oQuery as object
+    local cQuery as character
+    local lRet := .T.
+
+    begin transaction
+        try
+            if RecLock("SA1", .T.)
+                SA1->A1_COD := ::cCodigo
+                SA1->A1_NOME := ::cNome
+                SA1->A1_END := ::cEndereco
+                SA1->A1_TEL := ::cTelefone
+                SA1->A1_MSBLQL := iif(::lAtivo, "2", "1")
+                MsUnlock()
+            else
+                UserException("Erro ao bloquear registro")
+            endif
+
+            end transaction
+
+        catch oError
+            discard transaction
+            lRet := .F.
+            UserException(oError:Description)
+        endtry
+
+return lRet
+
+method excluir() as logical
+    local lRet := .T.
+
+    begin transaction
+        try
+            if RecLock("SA1", .F.)
+                dbDelete()
+                MsUnlock()
+            else
+                UserException("Erro ao bloquear registro")
+            endif
+
+            end transaction
+
+        catch oError
+            discard transaction
+            lRet := .F.
+            UserException(oError:Description)
+        endtry
+
+return lRet
+
+method getDados() as array
+    local aDados := array(4)
+
+    aDados[1] := ::cNome
+    aDados[2] := ::cEndereco
+    aDados[3] := ::cTelefone
+    aDados[4] := ::lAtivo
+
+return aDados
+
+/*/{Protheus.doc} CadastroCliente
+Funcao principal para interface com usuario
+@type function
+@author Guilherme Souza
+@since 2024
+/*/
+user function CadastroCliente()
+    local cCodigo as character
+    local cNome as character
+    local cEndereco as character
+    local cTelefone as character
+    local oCliente as object
+    local lSucesso as logical
+
+    // Interface com usuario
+    @ 01, 01 say "Codigo do Cliente: " get cCodigo
+    @ 02, 01 say "Nome: " get cNome
+    @ 03, 01 say "Endereco: " get cEndereco
+    @ 04, 01 say "Telefone: " get cTelefone
+    read
+
+    try
+        // Cria objeto e salva dados
+        oCliente := clientes.Cliente():new(cCodigo)
+        lSucesso := oCliente:setDados(cNome, cEndereco, cTelefone)
+
+        if lSucesso
+            lSucesso := oCliente:salvar()
+            if lSucesso
+                MsgInfo("Cliente cadastrado com sucesso", "Sucesso")
+            endif
+        endif
+
+    catch oError
+        MsgStop(oError:Description, "Erro")
+    endtry
+
+return
