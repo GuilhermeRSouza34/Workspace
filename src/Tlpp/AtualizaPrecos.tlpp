@@ -49,7 +49,7 @@ method atualizarPrecos() as numeric
 
             // Executa a query
             if TCSQLExec(cQuery) < 0
-                UserException("Erro ao atualizar preços: " + TCSQLError())
+                UserException("Erro ao atualizar pre�os: " + TCSQLError())
             endif
 
             // Obtém quantidade de registros atualizados
@@ -86,7 +86,7 @@ user function AtualizaPrecosCateg()
         oAtualizador := produtos.AtualizaPrecos():new(cCategoria, nPercentual)
         nAtualizados := oAtualizador:atualizarPrecos()
 
-        MsgInfo(AllTrim(Str(nAtualizados)) + " produtos atualizados.", "Concluído")
+        MsgInfo(AllTrim(Str(nAtualizados)) + " produtos atualizados.", "Concluido")
 
     catch oError
         MsgStop(oError:Description, "Erro")
