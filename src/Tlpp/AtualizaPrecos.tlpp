@@ -4,9 +4,9 @@
 namespace produtos
 
 /*/{Protheus.doc} AtualizaPrecos
-Classe para atualiza√ß√£o de pre√ßos de produtos por categoria
+Classe para atualizaÁ„oo de preÁos de produtos por categoria
 @type class
-@author Trae AI
+@author Guilherme Souza
 @since 2024
 /*/
 class AtualizaPrecos
@@ -65,9 +65,9 @@ method atualizarPrecos() as numeric
 return ::nAtualizados
 
 /*/{Protheus.doc} AtualizaPrecosCateg
-Fun√ß√£o principal para interface com usu√°rio
+FunÁ„oo principal para interface com usuario
 @type function
-@author Trae AI
+@author Guilherme Souza
 @since 2024
 /*/
 user function AtualizaPrecosCateg()
