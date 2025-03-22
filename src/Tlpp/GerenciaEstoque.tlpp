@@ -1,0 +1,136 @@
+#include "tlpp-core.th"
+#include "tlpp-rest.th"
+
+namespace estoque
+
+/*/{Protheus.doc} GerenciaEstoque
+Classe para gerenciamento de estoque de produtos
+@type class
+@author Guilherme Souza
+@since 2024
+/*/
+class GerenciaEstoque
+    private
+        data cProduto as character
+        data nQuantidade as numeric
+        data cTipoMov as character
+        data cArmazem as character
+        data cDocumento as character
+
+    public
+        method new(cProd as character, nQuant as numeric, cTipo as character) as object
+        method setArmazem(cArm as character) as logical
+        method setDocumento(cDoc as character) as logical
+        method movimentar() as logical
+        method getDados() as array
+endclass
+
+method new(cProd as character, nQuant as numeric, cTipo as character) as object
+    ::cProduto := cProd
+    ::nQuantidade := nQuant
+    ::cTipoMov := cTipo
+return self
+
+method setArmazem(cArm as character) as logical
+    local lRet := .T.
+
+    if empty(cArm)
+        UserException("Armazem nao pode ser vazio")
+    endif
+
+    ::cArmazem := cArm
+
+return lRet
+
+method setDocumento(cDoc as character) as logical
+    local lRet := .T.
+
+    if empty(cDoc)
+        UserException("Documento nao pode ser vazio")
+    endif
+
+    ::cDocumento := cDoc
+
+return lRet
+
+method movimentar() as logical
+    local lRet := .T.
+
+    begin transaction
+        try
+            if RecLock("SB2", .T.)
+                if ::cTipoMov == "E"
+                    SB2->B2_QATU += ::nQuantidade
+                else
+                    SB2->B2_QATU -= ::nQuantidade
+                endif
+                SB2->B2_LOCAL := ::cArmazem
+                MsUnlock()
+            else
+                UserException("Erro ao bloquear registro")
+            endif
+
+            end transaction
+
+        catch oError
+            discard transaction
+            lRet := .F.
+            UserException(oError:Description)
+        endtry
+
+return lRet
+
+method getDados() as array
+    local aDados := array(5)
+
+    aDados[1] := ::cProduto
+    aDados[2] := ::nQuantidade
+    aDados[3] := ::cTipoMov
+    aDados[4] := ::cArmazem
+    aDados[5] := ::cDocumento
+
+return aDados
+
+/*/{Protheus.doc} MovimentaEstoque
+Funcao principal para interface com usuario
+@type function
+@author Guilherme Souza
+@since 2024
+/*/
+user function MovimentaEstoque()
+    local cProduto as character
+    local nQuantidade as numeric
+    local cTipoMov as character
+    local cArmazem as character
+    local cDocumento as character
+    local oEstoque as object
+    local lSucesso as logical
+
+    // Interface com usuario
+    @ 01, 01 say "Codigo do Produto: " get cProduto
+    @ 02, 01 say "Quantidade: " get nQuantidade picture "@E 999999.99"
+    @ 03, 01 say "Tipo Movimentacao (E/S): " get cTipoMov
+    @ 04, 01 say "Armazem: " get cArmazem
+    @ 05, 01 say "Documento: " get cDocumento
+    read
+
+    try
+        // Cria objeto e realiza movimentacao
+        oEstoque := estoque.GerenciaEstoque():new(cProduto, nQuantidade, cTipoMov)
+        lSucesso := oEstoque:setArmazem(cArmazem)
+        
+        if lSucesso
+            lSucesso := oEstoque:setDocumento(cDocumento)
+            if lSucesso
+                lSucesso := oEstoque:movimentar()
+                if lSucesso
+                    MsgInfo("Movimentacao realizada com sucesso", "Sucesso")
+                endif
+            endif
+        endif
+
+    catch oError
+        MsgStop(oError:Description, "Erro")
+    endtry
+
+return
