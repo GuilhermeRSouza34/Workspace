@@ -1,0 +1,95 @@
+#include "tlpp-core.th"
+#include "tlpp-rest.th"
+
+namespace produtos
+
+/*/{Protheus.doc} AtualizaPrecos
+Classe para atualização de preços de produtos por categoria
+@type class
+@author Trae AI
+@since 2024
+/*/
+class AtualizaPrecos
+    private
+        data cCategoria as character
+        data nPercentual as numeric
+        data nAtualizados as numeric
+
+    public
+        method new(cCateg as character, nPerc as numeric) as object
+        method atualizarPrecos() as numeric
+        method getAtualizados() as numeric
+endclass
+
+method new(cCateg as character, nPerc as numeric) as object
+    ::cCategoria := cCateg
+    ::nPercentual := nPerc
+    ::nAtualizados := 0
+return self
+
+method getAtualizados() as numeric
+return ::nAtualizados
+
+method atualizarPrecos() as numeric
+    local oQuery as object
+    local cQuery as character
+    local nNovoPreco as numeric
+
+    if empty(::cCategoria) .or. ::nPercentual <= 0
+        UserException("Dados inválidos para atualização")
+    endif
+
+    begin transaction
+        try
+            // Cria query para atualizar preços
+            cQuery := "UPDATE " + RetSqlName("SB1") + " "
+            cQuery += "SET B1_PRV1 = B1_PRV1 * (1 + (" + alltrim(str(::nPercentual)) + " / 100)) "
+            cQuery += "WHERE B1_CATEG = '" + ::cCategoria + "' "
+            cQuery += "AND D_E_L_E_T_ = ' '"
+
+            // Executa a query
+            if TCSQLExec(cQuery) < 0
+                UserException("Erro ao atualizar preços: " + TCSQLError())
+            endif
+
+            // Obtém quantidade de registros atualizados
+            ::nAtualizados := TCSQLRowsAffected()
+            
+            end transaction
+
+        catch oError
+            discard transaction
+            UserException(oError:Description)
+        endtry
+
+return ::nAtualizados
+
+/*/{Protheus.doc} AtualizaPrecosCateg
+Função principal para interface com usuário
+@type function
+@author Trae AI
+@since 2024
+/*/
+user function AtualizaPrecosCateg()
+    local cCategoria as character
+    local nPercentual as numeric
+    local oAtualizador as object
+    local nAtualizados as numeric
+
+    // Interface com usuário
+    @ 01, 01 say "Informe a categoria: " get cCategoria
+    @ 02, 01 say "Percentual de aumento (%): " get nPercentual picture "999.99"
+    read
+
+    try
+        // Cria objeto e executa atualização
+        oAtualizador := produtos.AtualizaPrecos():new(cCategoria, nPercentual)
+        nAtualizados := oAtualizador:atualizarPrecos()
+
+        MsgInfo(AllTrim(Str(nAtualizados)) + " produtos atualizados.", "Concluído")
+
+    catch oError
+        MsgStop(oError:Description, "Erro")
+    endtry
+
+return
