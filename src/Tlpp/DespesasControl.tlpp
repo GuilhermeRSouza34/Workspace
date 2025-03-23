@@ -1,0 +1,270 @@
+#include "tlpp-core.th"
+#include "tlpp-rest.th"
+
+namespace despesas
+
+/*/{Protheus.doc} DespesasControl
+Classe para gerenciamento de despesas
+@type class
+@author Guilherme Souza
+@since 2024
+/*/
+class DespesasControl
+    private
+        data cCodigo as character
+        data cDescricao as character
+        data cCategoria as character
+        data cCentroCusto as character
+        data nValor as numeric
+        data dData as date
+        data cSolicitante as character
+        data cAprovador as character
+        data cStatus as character
+
+    public
+        method new() as object
+        method setDados(cDesc as character, cCat as character, cCC as character, nVal as numeric) as logical
+        method setSolicitante(cSol as character) as logical
+        method validarValor() as logical
+        method validarCategoria() as logical
+        method validarCentroCusto() as logical
+        method gravarDespesa() as logical
+        method aprovarDespesa(cAprov as character) as logical
+        method getDados() as array
+endclass
+
+method new() as object
+    ::cStatus := "P" // Pendente
+    ::cCodigo := GetSXENum("ZD1", "ZD1_COD")
+    ::dData := Date()
+return self
+
+method setDados(cDesc as character, cCat as character, cCC as character, nVal as numeric) as logical
+    local lRet := .T.
+
+    if empty(cDesc)
+        UserException("Descricao nao pode ser vazia")
+    endif
+
+    if empty(cCat)
+        UserException("Categoria nao pode ser vazia")
+    endif
+
+    if empty(cCC)
+        UserException("Centro de Custo nao pode ser vazio")
+    endif
+
+    if nVal <= 0
+        UserException("Valor deve ser maior que zero")
+    endif
+
+    ::cDescricao := cDesc
+    ::cCategoria := cCat
+    ::cCentroCusto := cCC
+    ::nValor := nVal
+
+return lRet
+
+method setSolicitante(cSol as character) as logical
+    local lRet := .T.
+
+    if empty(cSol)
+        UserException("Solicitante nao pode ser vazio")
+    endif
+
+    ::cSolicitante := cSol
+
+return lRet
+
+method validarValor() as logical
+    local lRet := .T.
+    local nLimite := 0
+
+    // Verifica limite por categoria
+    if Select("ZD2") == 0
+        UserException("Tabela de limites nao esta aberta")
+    endif
+
+    ZD2->(dbSetOrder(1))
+    if !ZD2->(dbSeek(xFilial("ZD2") + ::cCategoria))
+        UserException("Categoria nao encontrada")
+    endif
+
+    nLimite := ZD2->ZD2_LIMITE
+    if nLimite < ::nValor
+        UserException("Valor excede o limite da categoria")
+    endif
+
+return lRet
+
+method validarCategoria() as logical
+    local lRet := .T.
+
+    // Verifica se categoria esta ativa
+    if Select("ZD2") == 0
+        UserException("Tabela de categorias nao esta aberta")
+    endif
+
+    ZD2->(dbSetOrder(1))
+    if !ZD2->(dbSeek(xFilial("ZD2") + ::cCategoria))
+        UserException("Categoria nao encontrada")
+    endif
+
+    if ZD2->ZD2_MSBLQL == "1"
+        UserException("Categoria bloqueada para uso")
+    endif
+
+return lRet
+
+method validarCentroCusto() as logical
+    local lRet := .T.
+
+    // Verifica se centro de custo esta ativo
+    if Select("CTT") == 0
+        UserException("Tabela de centros de custo nao esta aberta")
+    endif
+
+    CTT->(dbSetOrder(1))
+    if !CTT->(dbSeek(xFilial("CTT") + ::cCentroCusto))
+        UserException("Centro de custo nao encontrado")
+    endif
+
+    if CTT->CTT_BLOQ == "1"
+        UserException("Centro de custo bloqueado")
+    endif
+
+return lRet
+
+method gravarDespesa() as logical
+    local lRet := .T.
+
+    begin transaction
+        try
+            if RecLock("ZD1", .T.)
+                ZD1->ZD1_FILIAL := xFilial("ZD1")
+                ZD1->ZD1_COD    := ::cCodigo
+                ZD1->ZD1_DESC   := ::cDescricao
+                ZD1->ZD1_CATEG  := ::cCategoria
+                ZD1->ZD1_CC     := ::cCentroCusto
+                ZD1->ZD1_VALOR  := ::nValor
+                ZD1->ZD1_DATA   := ::dData
+                ZD1->ZD1_SOLIC  := ::cSolicitante
+                ZD1->ZD1_STATUS := ::cStatus
+                MsUnlock()
+
+                ConfirmSX8()
+                end transaction
+            else
+                UserException("Erro ao bloquear registro")
+            endif
+
+        catch oError
+            RollBackSX8()
+            discard transaction
+            lRet := .F.
+            UserException(oError:Description)
+        endtry
+
+return lRet
+
+method aprovarDespesa(cAprov as character) as logical
+    local lRet := .T.
+
+    if empty(cAprov)
+        UserException("Aprovador nao pode ser vazio")
+    endif
+
+    if ::cStatus != "P"
+        UserException("Despesa nao esta pendente de aprovacao")
+    endif
+
+    begin transaction
+        try
+            if RecLock("ZD1", .F.)
+                ::cAprovador := cAprov
+                ::cStatus := "A" // Aprovado
+
+                ZD1->ZD1_APROV  := ::cAprovador
+                ZD1->ZD1_STATUS := ::cStatus
+                MsUnlock()
+
+                end transaction
+            else
+                UserException("Erro ao bloquear registro")
+            endif
+
+        catch oError
+            discard transaction
+            lRet := .F.
+            UserException(oError:Description)
+        endtry
+
+return lRet
+
+method getDados() as array
+    local aDados := array(9)
+
+    aDados[1] := ::cCodigo
+    aDados[2] := ::cDescricao
+    aDados[3] := ::cCategoria
+    aDados[4] := ::cCentroCusto
+    aDados[5] := ::nValor
+    aDados[6] := ::dData
+    aDados[7] := ::cSolicitante
+    aDados[8] := ::cAprovador
+    aDados[9] := ::cStatus
+
+return aDados
+
+/*/{Protheus.doc} RegistrarDespesa
+Funcao principal para interface com usuario
+@type function
+@author Guilherme Souza
+@since 2024
+/*/
+user function RegistrarDespesa()
+    local cDescricao as character
+    local cCategoria as character
+    local cCentroCusto as character
+    local nValor as numeric
+    local cSolicitante as character
+    local oDespesas as object
+    local lSucesso as logical
+
+    // Interface com usuario
+    @ 01, 01 say "Descricao: " get cDescricao
+    @ 02, 01 say "Categoria: " get cCategoria
+    @ 03, 01 say "Centro de Custo: " get cCentroCusto
+    @ 04, 01 say "Valor: " get nValor picture "@E 999,999.99"
+    @ 05, 01 say "Solicitante: " get cSolicitante
+    read
+
+    try
+        // Cria objeto e registra despesa
+        oDespesas := despesas.DespesasControl():new()
+        lSucesso := oDespesas:setDados(cDescricao, cCategoria, cCentroCusto, nValor)
+        
+        if lSucesso
+            lSucesso := oDespesas:setSolicitante(cSolicitante)
+            if lSucesso
+                lSucesso := oDespesas:validarValor()
+                if lSucesso
+                    lSucesso := oDespesas:validarCategoria()
+                    if lSucesso
+                        lSucesso := oDespesas:validarCentroCusto()
+                        if lSucesso
+                            lSucesso := oDespesas:gravarDespesa()
+                            if lSucesso
+                                MsgInfo("Despesa registrada com sucesso. Codigo: " + oDespesas:getDados()[1], "Sucesso")
+                            endif
+                        endif
+                    endif
+                endif
+            endif
+        endif
+
+    catch oError
+        MsgStop(oError:Description, "Erro")
+    endtry
+
+return
