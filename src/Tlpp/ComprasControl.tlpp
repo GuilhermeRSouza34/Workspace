@@ -1,0 +1,215 @@
+#include "tlpp-core.th"
+#include "tlpp-rest.th"
+
+namespace compras
+
+class ComprasControl
+    private
+        data cFornecedor as character
+        data cProduto as character
+        data nQuantidade as numeric
+        data nPrecoUnit as numeric
+        data nTotal as numeric
+        data cSolicitacao as character
+        data cStatus as character
+        data dDataEntrega as date
+        data cAprovador as character
+
+    public
+        method new() as object
+        method setFornecedor(cForn as character) as logical
+        method setProduto(cProd as character, nQuant as numeric, nPreco as numeric) as logical
+        method setDataEntrega(dData as date) as logical
+        method validarFornecedor() as logical
+        method validarOrcamento() as logical
+        method gravarSolicitacao() as logical
+        method aprovarSolicitacao(cAprov as character) as logical
+        method getDados() as array
+endclass
+
+method new() as object
+    ::cStatus := "P" // Pendente
+return self
+
+method setFornecedor(cForn as character) as logical
+    local lRet := .T.
+
+    if empty(cForn)
+        UserException("Fornecedor nao pode ser vazio")
+    endif
+
+    ::cFornecedor := cForn
+return lRet
+
+method setProduto(cProd as character, nQuant as numeric, nPreco as numeric) as logical
+    local lRet := .T.
+
+    if empty(cProd)
+        UserException("Produto nao pode ser vazio")
+    endif
+
+    if nQuant <= 0
+        UserException("Quantidade deve ser maior que zero")
+    endif
+
+    if nPreco <= 0
+        UserException("Preco deve ser maior que zero")
+    endif
+
+    ::cProduto := cProd
+    ::nQuantidade := nQuant
+    ::nPrecoUnit := nPreco
+    ::nTotal := nQuant * nPreco
+
+return lRet
+
+method setDataEntrega(dData as date) as logical
+    local lRet := .T.
+
+    if empty(dData) .or. dData < Date()
+        UserException("Data de entrega invalida")
+    endif
+
+    ::dDataEntrega := dData
+return lRet
+
+method validarFornecedor() as logical
+    local lRet := .T.
+
+    if Select("SA2") == 0
+        UserException("Tabela de fornecedores nao esta aberta")
+    endif
+
+    SA2->(dbSetOrder(1))
+    if !SA2->(dbSeek(xFilial("SA2") + ::cFornecedor))
+        UserException("Fornecedor nao cadastrado")
+    endif
+
+return lRet
+
+method validarOrcamento() as logical
+    local lRet := .T.
+    local nOrcamento := 0
+
+    // Simula validação de orçamento disponível
+    if ::nTotal > 100000
+        UserException("Valor acima do limite permitido")
+    endif
+
+return lRet
+
+method gravarSolicitacao() as logical
+    local lRet := .T.
+    local cNumSol := ""
+
+    begin transaction
+        try
+            cNumSol := GetSXENum("SC1", "C1_NUM")
+            ::cSolicitacao := cNumSol
+
+            if RecLock("SC1", .T.)
+                SC1->C1_FILIAL  := xFilial("SC1")
+                SC1->C1_NUM     := cNumSol
+                SC1->C1_FORNECE := ::cFornecedor
+                SC1->C1_PRODUTO := ::cProduto
+                SC1->C1_QUANT   := ::nQuantidade
+                SC1->C1_PRECO   := ::nPrecoUnit
+                SC1->C1_TOTAL   := ::nTotal
+                SC1->C1_EMISSAO := Date()
+                SC1->C1_DATPRF  := ::dDataEntrega
+                SC1->C1_STATUS  := ::cStatus
+                MsUnlock()
+            else
+                UserException("Erro ao gravar solicitacao")
+            endif
+
+            ConfirmSX8()
+            end transaction
+
+        catch oError
+            RollBackSX8()
+            discard transaction
+            lRet := .F.
+            UserException(oError:Description)
+        endtry
+
+return lRet
+
+method aprovarSolicitacao(cAprov as character) as logical
+    local lRet := .T.
+
+    if empty(cAprov)
+        UserException("Aprovador nao informado")
+    endif
+
+    ::cAprovador := cAprov
+    ::cStatus := "A" // Aprovado
+
+    if RecLock("SC1", .F.)
+        SC1->C1_STATUS := ::cStatus
+        SC1->C1_APROVA := ::cAprovador
+        MsUnlock()
+    else
+        UserException("Erro ao atualizar status")
+    endif
+
+return lRet
+
+method getDados() as array
+    local aDados := array(8)
+
+    aDados[1] := ::cFornecedor
+    aDados[2] := ::cProduto
+    aDados[3] := ::nQuantidade
+    aDados[4] := ::nPrecoUnit
+    aDados[5] := ::nTotal
+    aDados[6] := ::cSolicitacao
+    aDados[7] := ::cStatus
+    aDados[8] := ::dDataEntrega
+
+return aDados
+
+user function CriarSolicitacao()
+    local cFornecedor as character
+    local cProduto as character
+    local nQuantidade as numeric
+    local nPrecoUnit as numeric
+    local dEntrega as date
+    local oCompras as object
+    local lSucesso as logical
+
+    @ 01, 01 say "Fornecedor: " get cFornecedor
+    @ 02, 01 say "Produto: " get cProduto
+    @ 03, 01 say "Quantidade: " get nQuantidade picture "@E 999999.99"
+    @ 04, 01 say "Preco Unitario: " get nPrecoUnit picture "@E 999999.99"
+    @ 05, 01 say "Data Entrega: " get dEntrega
+    read
+
+    try
+        oCompras := compras.ComprasControl():new()
+        
+        lSucesso := oCompras:setFornecedor(cFornecedor)
+        if lSucesso
+            lSucesso := oCompras:setProduto(cProduto, nQuantidade, nPrecoUnit)
+            if lSucesso
+                lSucesso := oCompras:setDataEntrega(dEntrega)
+                if lSucesso
+                    lSucesso := oCompras:validarFornecedor()
+                    if lSucesso
+                        lSucesso := oCompras:validarOrcamento()
+                        if lSucesso
+                            lSucesso := oCompras:gravarSolicitacao()
+                            if lSucesso
+                                MsgInfo("Solicitacao criada: " + oCompras:getDados()[6], "Sucesso")
+                            endif
+                        endif
+                    endif
+                endif
+            endif
+        endif
+
+    catch oError
+        MsgStop(oError:Description, "Erro")
+    endtry
+
+return
