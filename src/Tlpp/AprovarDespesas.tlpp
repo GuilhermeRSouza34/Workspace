@@ -1,0 +1,105 @@
+#include "tlpp-core.th"
+#include "tlpp-rest.th"
+
+namespace despesas
+
+/*/{Protheus.doc} AprovarDespesas
+Funcao para aprovacao de despesas pendentes
+@type function
+@author Guilherme Souza
+@since 2024
+/*/
+user function AprovarDespesas()
+    local cCodigo as character
+    local cAprovador as character
+    local oDespesas as object
+    local lSucesso as logical
+    local aDados := array(0)
+    local nOpc := 0
+    local aButtons := {"Aprovar", "Rejeitar", "Voltar"}
+
+    // Seleciona despesa pendente
+    if Select("ZD1") == 0
+        UserException("Tabela de despesas nao esta aberta")
+    endif
+
+    ZD1->(dbSetOrder(1))
+    ZD1->(dbGoTop())
+
+    while !ZD1->(eof())
+        if ZD1->ZD1_STATUS == "P" // Pendente
+            aadd(aDados, {
+                ZD1->ZD1_COD,
+                ZD1->ZD1_DESC,
+                ZD1->ZD1_CATEG,
+                ZD1->ZD1_CC,
+                transform(ZD1->ZD1_VALOR, "@E 999,999.99"),
+                dtoc(ZD1->ZD1_DATA),
+                ZD1->ZD1_SOLIC
+            })
+        endif
+        ZD1->(dbSkip())
+    end
+
+    if len(aDados) == 0
+        MsgInfo("Nao ha despesas pendentes de aprovacao", "Aviso")
+        return
+    endif
+
+    // Interface com usuario
+    @ 01, 01 say "Despesas Pendentes"
+    @ 02, 01 say replicate("-", 70)
+    @ 03, 01 say "Codigo    Descricao                  Categoria  Centro Custo  Valor         Data       Solicitante"
+    @ 04, 01 say replicate("-", 70)
+
+    for nI := 1 to len(aDados)
+        @ nI+4, 01 say padr(aDados[nI,1], 10)
+        @ nI+4, 11 say padr(aDados[nI,2], 25)
+        @ nI+4, 36 say padr(aDados[nI,3], 10)
+        @ nI+4, 46 say padr(aDados[nI,4], 10)
+        @ nI+4, 56 say padr(aDados[nI,5], 12)
+        @ nI+4, 68 say padr(aDados[nI,6], 10)
+        @ nI+4, 78 say padr(aDados[nI,7], 15)
+    next
+
+    @ len(aDados)+5, 01 say replicate("-", 70)
+    @ len(aDados)+6, 01 say "Codigo da Despesa: " get cCodigo
+    @ len(aDados)+7, 01 say "Aprovador: " get cAprovador
+    read
+
+    if empty(cCodigo) .or. empty(cAprovador)
+        MsgStop("Codigo da despesa e aprovador sao obrigatorios", "Erro")
+        return
+    endif
+
+    nOpc := Aviso("Aprovacao", "Selecione a acao desejada", aButtons, 2)
+
+    try
+        // Localiza e processa despesa
+        ZD1->(dbSeek(xFilial("ZD1") + cCodigo))
+        if ZD1->ZD1_STATUS != "P"
+            UserException("Despesa nao esta pendente de aprovacao")
+        endif
+
+        oDespesas := despesas.DespesasControl():new()
+        oDespesas:cCodigo := cCodigo
+
+        if nOpc == 1 // Aprovar
+            lSucesso := oDespesas:aprovarDespesa(cAprovador)
+            if lSucesso
+                MsgInfo("Despesa aprovada com sucesso", "Sucesso")
+            endif
+        elseif nOpc == 2 // Rejeitar
+            if RecLock("ZD1", .F.)
+                ZD1->ZD1_STATUS := "R" // Rejeitado
+                ZD1->ZD1_APROV := cAprovador
+                MsUnlock()
+                MsgInfo("Despesa rejeitada com sucesso", "Sucesso")
+            endif
+        endif
+
+    catch oError
+        MsgStop(oError:Description, "Erro")
+    endtry
+
+return
