@@ -178,13 +178,12 @@ user function CriarSolicitacao()
     local oCompras as object
     local lSucesso as logical
 
-    @ 01, 01 say "Fornecedor: " get cFornecedor
-    @ 02, 01 say "Produto: " get cProduto
-    @ 03, 01 say "Quantidade: " get nQuantidade picture "@E 999999.99"
-    @ 04, 01 say "Preco Unitario: " get nPrecoUnit picture "@E 999999.99"
-    @ 05, 01 say "Data Entrega: " get dEntrega
-    read
+    // Coleta de dados do usuário
+    if !ColetarDados(@cFornecedor, @cProduto, @nQuantidade, @nPrecoUnit, @dEntrega)
+        return
+    endif
 
+    // Criação da solicitação de compra
     try
         oCompras := compras.ComprasControl():new()
         
@@ -194,16 +193,7 @@ user function CriarSolicitacao()
             if lSucesso
                 lSucesso := oCompras:setDataEntrega(dEntrega)
                 if lSucesso
-                    lSucesso := oCompras:validarFornecedor()
-                    if lSucesso
-                        lSucesso := oCompras:validarOrcamento()
-                        if lSucesso
-                            lSucesso := oCompras:gravarSolicitacao()
-                            if lSucesso
-                                MsgInfo("Solicitacao criada: " + oCompras:getDados()[6], "Sucesso")
-                            endif
-                        endif
-                    endif
+                    lSucesso := ValidarEGravarSolicitacao(oCompras)
                 endif
             endif
         endif
@@ -213,3 +203,38 @@ user function CriarSolicitacao()
     endtry
 
 return
+
+// Função para coletar dados do usuário
+static function ColetarDados(cFornecedor, cProduto, nQuantidade, nPrecoUnit, dEntrega) as logical
+    local lRet := .T.
+
+    @ 01, 01 say "Fornecedor: " get cFornecedor
+    @ 02, 01 say "Produto: " get cProduto
+    @ 03, 01 say "Quantidade: " get nQuantidade picture "@E 999999.99"
+    @ 04, 01 say "Preco Unitario: " get nPrecoUnit picture "@E 999999.99"
+    @ 05, 01 say "Data Entrega: " get dEntrega
+    read
+
+    if empty(cFornecedor) .or. empty(cProduto) .or. nQuantidade <= 0 .or. nPrecoUnit <= 0 .or. empty(dEntrega)
+        MsgStop("Todos os campos são obrigatórios e devem ser válidos.", "Erro")
+        lRet := .F.
+    endif
+
+return lRet
+
+// Função para validar e gravar a solicitação
+static function ValidarEGravarSolicitacao(oCompras) as logical
+    local lSucesso := .T.
+
+    lSucesso := oCompras:validarFornecedor()
+    if lSucesso
+        lSucesso := oCompras:validarOrcamento()
+        if lSucesso
+            lSucesso := oCompras:gravarSolicitacao()
+            if lSucesso
+                MsgInfo("Solicitacao criada: " + oCompras:getDados()[6], "Sucesso")
+            endif
+        endif
+    endif
+
+return lSucesso

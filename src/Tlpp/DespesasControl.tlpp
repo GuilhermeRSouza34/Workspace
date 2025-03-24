@@ -41,23 +41,18 @@ return self
 
 method setDados(cDesc as character, cCat as character, cCC as character, nVal as numeric) as logical
     local lRet := .T.
+    local aValidacoes := {}
 
-    if empty(cDesc)
-        UserException("Descricao nao pode ser vazia")
-    endif
+    // Define as validações necessárias
+    aadd(aValidacoes, {|| empty(cDesc), "Descricao nao pode ser vazia"})
+    aadd(aValidacoes, {|| empty(cCat), "Categoria nao pode ser vazia"})
+    aadd(aValidacoes, {|| empty(cCC), "Centro de Custo nao pode ser vazio"})
+    aadd(aValidacoes, {|| nVal <= 0, "Valor deve ser maior que zero"})
 
-    if empty(cCat)
-        UserException("Categoria nao pode ser vazia")
-    endif
+    // Executa todas as validações
+    aEval(aValidacoes, {|aValid| iif(Eval(aValid[1]), UserException(aValid[2]), nil)})
 
-    if empty(cCC)
-        UserException("Centro de Custo nao pode ser vazio")
-    endif
-
-    if nVal <= 0
-        UserException("Valor deve ser maior que zero")
-    endif
-
+    // Se passou por todas as validações, atualiza os dados
     ::cDescricao := cDesc
     ::cCategoria := cCat
     ::cCentroCusto := cCC
@@ -79,17 +74,21 @@ return lRet
 method validarValor() as logical
     local lRet := .T.
     local nLimite := 0
+    local aValidacoes := {}
 
-    // Verifica limite por categoria
-    if Select("ZD2") == 0
-        UserException("Tabela de limites nao esta aberta")
-    endif
+    // Define as validações necessárias
+    aadd(aValidacoes, {|| Select("ZD2") == 0, "Tabela de limites nao esta aberta"})
+    
+    // Executa validações iniciais
+    aEval(aValidacoes, {|aValid| iif(Eval(aValid[1]), UserException(aValid[2]), nil)})
 
+    // Busca e valida categoria
     ZD2->(dbSetOrder(1))
     if !ZD2->(dbSeek(xFilial("ZD2") + ::cCategoria))
         UserException("Categoria nao encontrada")
     endif
 
+    // Valida limite
     nLimite := ZD2->ZD2_LIMITE
     if nLimite < ::nValor
         UserException("Valor excede o limite da categoria")
@@ -99,17 +98,21 @@ return lRet
 
 method validarCategoria() as logical
     local lRet := .T.
+    local aValidacoes := {}
 
-    // Verifica se categoria esta ativa
-    if Select("ZD2") == 0
-        UserException("Tabela de categorias nao esta aberta")
-    endif
+    // Define as validações necessárias
+    aadd(aValidacoes, {|| Select("ZD2") == 0, "Tabela de categorias nao esta aberta"})
+    
+    // Executa validações iniciais
+    aEval(aValidacoes, {|aValid| iif(Eval(aValid[1]), UserException(aValid[2]), nil)})
 
+    // Busca e valida categoria
     ZD2->(dbSetOrder(1))
     if !ZD2->(dbSeek(xFilial("ZD2") + ::cCategoria))
         UserException("Categoria nao encontrada")
     endif
 
+    // Valida status da categoria
     if ZD2->ZD2_MSBLQL == "1"
         UserException("Categoria bloqueada para uso")
     endif
