@@ -117,7 +117,7 @@ method gravarPedido() as logical
             cNumPed := GetSXENum("SC5", "C5_NUM")
             ::cPedido := cNumPed
 
-            // Grava cabeÃ§alho do pedido
+            // Grava cabeï¿½alho do pedido
             if RecLock("SC5", .T.)
                 SC5->C5_FILIAL := xFilial("SC5")
                 SC5->C5_NUM    := cNumPed
@@ -186,7 +186,7 @@ user function RealizarVenda()
     local nQuantidade as numeric
     local nPrecoUnit as numeric
     local oVendas as object
-    local lSucesso as logical
+    local aDados as array
 
     // Interface com usuario
     @ 01, 01 say "Codigo do Cliente: " get cCliente
@@ -198,26 +198,58 @@ user function RealizarVenda()
     try
         // Cria objeto e realiza venda
         oVendas := vendas.VendasControl():new()
-        lSucesso := oVendas:setCliente(cCliente)
         
-        if lSucesso
-            lSucesso := oVendas:setProduto(cProduto, nQuantidade, nPrecoUnit)
-            if lSucesso
-                lSucesso := oVendas:validarEstoque()
-                if lSucesso
-                    lSucesso := oVendas:validarCredito()
-                    if lSucesso
-                        lSucesso := oVendas:gravarPedido()
-                        if lSucesso
-                            MsgInfo("Venda realizada com sucesso. Pedido: " + oVendas:getDados()[6], "Sucesso")
-                        endif
-                    endif
-                endif
-            endif
+        // Executa o fluxo de venda de forma sequencial
+        if !ProcessarVenda(oVendas, cCliente, cProduto, nQuantidade, nPrecoUnit)
+            return
         endif
+
+        // ObtÃ©m os dados da venda e exibe mensagem de sucesso
+        aDados := oVendas:getDados()
+        MsgInfo("Venda realizada com sucesso. Pedido: " + aDados[6], "Sucesso")
 
     catch oError
         MsgStop(oError:Description, "Erro")
     endtry
 
 return
+
+/*/{Protheus.doc} ProcessarVenda
+Funcao auxiliar para processar o fluxo de venda
+@type function
+@param oVendas, object, Objeto de controle de vendas
+@param cCliente, character, Codigo do cliente
+@param cProduto, character, Codigo do produto
+@param nQuantidade, numeric, Quantidade vendida
+@param nPrecoUnit, numeric, Preco unitario
+@return logical, Indica se o processamento foi bem sucedido
+@author Guilherme Souza
+@since 2024
+/*/
+static function ProcessarVenda(oVendas, cCliente, cProduto, nQuantidade, nPrecoUnit)
+    // Validação do cliente
+    if !oVendas:setCliente(cCliente)
+        return .F.
+    endif
+
+    // Validação do produto
+    if !oVendas:setProduto(cProduto, nQuantidade, nPrecoUnit)
+        return .F.
+    endif
+
+    // Validação do estoque
+    if !oVendas:validarEstoque()
+        return .F.
+    endif
+
+    // Validação do credito
+    if !oVendas:validarCredito()
+        return .F.
+    endif
+
+    // Gravação do pedido
+    if !oVendas:gravarPedido()
+        return .F.
+    endif
+
+return .T.
