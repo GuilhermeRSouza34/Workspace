@@ -7,7 +7,7 @@ namespace despesas
 Funcao para aprovacao de despesas pendentes
 @type function
 @author Guilherme Souza
-@since 2024
+@since 2025
 /*/
 user function AprovarDespesas()
     local cCodigo as character

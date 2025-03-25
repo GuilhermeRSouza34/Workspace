@@ -1,0 +1,393 @@
+#include "tlpp-core.th"
+#include "tlpp-rest.th"
+
+namespace rh
+
+/*/{Protheus.doc} FuncionariosControl
+Classe para gerenciamento de funcionários, incluindo cadastro, férias e benefícios
+@type class
+@author Guilherme Souza
+@since 2025
+/*/
+class FuncionariosControl
+    private
+        data cMatricula as character
+        data cNome as character
+        data cCPF as character
+        data cRG as character
+        data dDataNasc as date
+        data cEndereco as character
+        data cTelefone as character
+        data cEmail as character
+        data cCargo as character
+        data nSalario as numeric
+        data dDataAdmissao as date
+        data dDataDemissao as date
+        data lAtivo as logical
+        data aBeneficios as array
+        data aFerias as array
+        data aHistorico as array
+
+    public
+        method new(cMat as character) as object
+        method setDadosPessoais(cNome as character, cCPF as character, cRG as character, ;\n                               dDataNasc as date, cEnd as character, cTel as character, ;\n                               cEmail as character) as logical
+        method setDadosProfissionais(cCargo as character, nSalario as numeric, ;\n                                   dDataAdm as date) as logical
+        method adicionarBeneficio(cTipo as character, nValor as numeric, ;\n                                dDataIni as date) as logical
+        method programarFerias(dDataIni as date, nDias as numeric) as logical
+        method calcularFerias() as array
+        method registrarHistorico(cTipo as character, cDescricao as character) as logical
+        method demitir(dData as date) as logical
+        method salvar() as logical
+        method getDados() as array
+        method getBeneficios() as array
+        method getFerias() as array
+        method getHistorico() as array
+endclass
+
+method new(cMat as character) as object
+    ::cMatricula := cMat
+    ::lAtivo := .T.
+    ::aBeneficios := array(0)
+    ::aFerias := array(0)
+    ::aHistorico := array(0)
+return self
+
+method setDadosPessoais(cNome as character, cCPF as character, cRG as character, ;\n                       dDataNasc as date, cEnd as character, cTel as character, ;\n                       cEmail as character) as logical
+    local lRet := .T.
+
+    if empty(cNome) .or. empty(cCPF) .or. empty(cRG)
+        UserException("Dados pessoais obrigatórios não informados")
+    endif
+
+    if !RegEx(cCPF, "^\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2}$")
+        UserException("CPF inválido")
+    endif
+
+    if !RegEx(cEmail, "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$")
+        UserException("E-mail inválido")
+    endif
+
+    ::cNome := cNome
+    ::cCPF := cCPF
+    ::cRG := cRG
+    ::dDataNasc := dDataNasc
+    ::cEndereco := cEnd
+    ::cTelefone := cTel
+    ::cEmail := cEmail
+
+return lRet
+
+method setDadosProfissionais(cCargo as character, nSalario as numeric, ;\n                           dDataAdm as date) as logical
+    local lRet := .T.
+
+    if empty(cCargo) .or. nSalario <= 0
+        UserException("Dados profissionais inválidos")
+    endif
+
+    ::cCargo := cCargo
+    ::nSalario := nSalario
+    ::dDataAdmissao := dDataAdm
+
+return lRet
+
+method adicionarBeneficio(cTipo as character, nValor as numeric, ;\n                        dDataIni as date) as logical
+    local lRet := .T.
+    local aBenef := array(3)
+
+    if empty(cTipo) .or. nValor <= 0
+        UserException("Dados do benefício inválidos")
+    endif
+
+    aBenef[1] := cTipo
+    aBenef[2] := nValor
+    aBenef[3] := dDataIni
+
+    aadd(::aBeneficios, aBenef)
+
+return lRet
+
+method programarFerias(dDataIni as date, nDias as numeric) as logical
+    local lRet := .T.
+    local aFerias := array(2)
+
+    if nDias <= 0 .or. nDias > 30
+        UserException("Período de férias inválido")
+    endif
+
+    aFerias[1] := dDataIni
+    aFerias[2] := nDias
+
+    aadd(::aFerias, aFerias)
+
+return lRet
+
+method calcularFerias() as array
+    local aCalculo := array(3)
+    local nSalarioDia := ::nSalario / 30
+    local nDiasFerias := 0
+    local nI
+
+    // Soma dias de férias programados
+    for nI := 1 to len(::aFerias)
+        nDiasFerias += ::aFerias[nI, 2]
+    next
+
+    // Calcula valores
+    aCalculo[1] := nDiasFerias * nSalarioDia        // Salário férias
+    aCalculo[2] := aCalculo[1] / 3                  // 1/3 férias
+    aCalculo[3] := aCalculo[1] + aCalculo[2]        // Total
+
+return aCalculo
+
+method registrarHistorico(cTipo as character, cDescricao as character) as logical
+    local lRet := .T.
+    local aHist := array(3)
+
+    if empty(cTipo) .or. empty(cDescricao)
+        UserException("Dados do histórico inválidos")
+    endif
+
+    aHist[1] := cTipo
+    aHist[2] := cDescricao
+    aHist[3] := date()
+
+    aadd(::aHistorico, aHist)
+
+return lRet
+
+method demitir(dData as date) as logical
+    local lRet := .T.
+
+    if !::lAtivo
+        UserException("Funcionário já está inativo")
+    endif
+
+    ::dDataDemissao := dData
+    ::lAtivo := .F.
+
+    ::registrarHistorico("DEMISSAO", "Demissão em " + dtoc(dData))
+
+return lRet
+
+method salvar() as logical
+    local lRet := .T.
+
+    begin transaction
+        try
+            if RecLock("SRA", .T.)
+                SRA->RA_MAT := ::cMatricula
+                SRA->RA_NOME := ::cNome
+                SRA->RA_CIC := ::cCPF
+                SRA->RA_RG := ::cRG
+                SRA->RA_NASC := ::dDataNasc
+                SRA->RA_ENDEREC := ::cEndereco
+                SRA->RA_TELEFON := ::cTelefone
+                SRA->RA_EMAIL := ::cEmail
+                SRA->RA_CARGO := ::cCargo
+                SRA->RA_SALARIO := ::nSalario
+                SRA->RA_ADMISSA := ::dDataAdmissao
+                SRA->RA_DEMISSA := ::dDataDemissao
+                SRA->RA_MSBLQL := iif(::lAtivo, "2", "1")
+                MsUnlock()
+            endif
+
+        catch oError
+            DisarmTransaction()
+            UserException("Erro ao salvar: " + oError:Description)
+        endtry
+    end transaction
+
+return lRet
+
+method getDados() as array
+    local aDados := array(13)
+
+    aDados[1] := ::cMatricula
+    aDados[2] := ::cNome
+    aDados[3] := ::cCPF
+    aDados[4] := ::cRG
+    aDados[5] := ::dDataNasc
+    aDados[6] := ::cEndereco
+    aDados[7] := ::cTelefone
+    aDados[8] := ::cEmail
+    aDados[9] := ::cCargo
+    aDados[10] := ::nSalario
+    aDados[11] := ::dDataAdmissao
+    aDados[12] := ::dDataDemissao
+    aDados[13] := ::lAtivo
+
+return aDados
+
+method getBeneficios() as array
+return ::aBeneficios
+
+method getFerias() as array
+return ::aFerias
+
+method getHistorico() as array
+return ::aHistorico
+
+/*/{Protheus.doc} GerenciarFuncionario
+Função principal para interface com usuário
+@type function
+@author Guilherme Souza
+@since 2025
+/*/
+user function GerenciarFuncionario()
+    local cMatricula as character
+    local cNome as character
+    local cCPF as character
+    local cRG as character
+    local dDataNasc as date
+    local cEndereco as character
+    local cTelefone as character
+    local cEmail as character
+    local cCargo as character
+    local nSalario as numeric
+    local dDataAdm as date
+    local oFuncionario as object
+    local nOpcao as numeric
+    local aDados as array
+
+    while .T.
+        // Menu principal
+        @ 01, 01 clear to 20, 75
+        @ 01, 01 say "=== Gestão de Funcionários ==="
+        @ 03, 01 say "1. Novo Funcionário"
+        @ 04, 01 say "2. Consultar Funcionário"
+        @ 05, 01 say "3. Programar Férias"
+        @ 06, 01 say "4. Adicionar Benefício"
+        @ 07, 01 say "5. Registrar Histórico"
+        @ 08, 01 say "6. Demitir Funcionário"
+        @ 09, 01 say "7. Sair"
+        @ 11, 01 say "Opção: " get nOpcao
+        read
+
+        if nOpcao == 7
+            exit
+        endif
+
+        @ 13, 01 say "Matrícula: " get cMatricula
+        read
+
+        try
+            do case
+                case nOpcao == 1
+                    // Novo funcionário
+                    @ 14, 01 say "Nome: " get cNome
+                    @ 15, 01 say "CPF: " get cCPF
+                    @ 16, 01 say "RG: " get cRG
+                    @ 17, 01 say "Data Nasc.: " get dDataNasc
+                    @ 18, 01 say "Endereço: " get cEndereco
+                    @ 19, 01 say "Telefone: " get cTelefone
+                    @ 20, 01 say "E-mail: " get cEmail
+                    read
+
+                    oFuncionario := rh.FuncionariosControl():new(cMatricula)
+                    if !oFuncionario:setDadosPessoais(cNome, cCPF, cRG, dDataNasc, ;\n                                                     cEndereco, cTelefone, cEmail)
+                        loop
+                    endif
+
+                    @ 21, 01 say "Cargo: " get cCargo
+                    @ 22, 01 say "Salário: " get nSalario
+                    @ 23, 01 say "Data Adm.: " get dDataAdm
+                    read
+
+                    if !oFuncionario:setDadosProfissionais(cCargo, nSalario, dDataAdm)
+                        loop
+                    endif
+
+                    if !oFuncionario:salvar()
+                        loop
+                    endif
+
+                    MsgInfo("Funcionário cadastrado com sucesso!", "Sucesso")
+
+                case nOpcao == 2
+                    // Consultar funcionário
+                    oFuncionario := rh.FuncionariosControl():new(cMatricula)
+                    aDados := oFuncionario:getDados()
+
+                    if len(aDados) > 0
+                        @ 14, 01 say "Nome: " + aDados[2]
+                        @ 15, 01 say "CPF: " + aDados[3]
+                        @ 16, 01 say "Cargo: " + aDados[9]
+                        @ 17, 01 say "Salário: R$ " + Transform(aDados[10], "@E 999,999.99")
+                        @ 18, 01 say "Status: " + iif(aDados[13], "Ativo", "Inativo")
+                    else
+                        MsgStop("Funcionário não encontrado", "Erro")
+                    endif
+
+                case nOpcao == 3
+                    // Programar férias
+                    local dDataIni as date
+                    local nDias as numeric
+
+                    oFuncionario := rh.FuncionariosControl():new(cMatricula)
+                    @ 14, 01 say "Data Início: " get dDataIni
+                    @ 15, 01 say "Dias: " get nDias
+                    read
+
+                    if oFuncionario:programarFerias(dDataIni, nDias)
+                        if oFuncionario:salvar()
+                            MsgInfo("Férias programadas com sucesso!", "Sucesso")
+                        endif
+                    endif
+
+                case nOpcao == 4
+                    // Adicionar benefício
+                    local cTipo as character
+                    local nValor as numeric
+                    local dDataIni as date
+
+                    oFuncionario := rh.FuncionariosControl():new(cMatricula)
+                    @ 14, 01 say "Tipo: " get cTipo
+                    @ 15, 01 say "Valor: " get nValor
+                    @ 16, 01 say "Data Início: " get dDataIni
+                    read
+
+                    if oFuncionario:adicionarBeneficio(cTipo, nValor, dDataIni)
+                        if oFuncionario:salvar()
+                            MsgInfo("Benefício adicionado com sucesso!", "Sucesso")
+                        endif
+                    endif
+
+                case nOpcao == 5
+                    // Registrar histórico
+                    local cTipo as character
+                    local cDescricao as character
+
+                    oFuncionario := rh.FuncionariosControl():new(cMatricula)
+                    @ 14, 01 say "Tipo: " get cTipo
+                    @ 15, 01 say "Descrição: " get cDescricao
+                    read
+
+                    if oFuncionario:registrarHistorico(cTipo, cDescricao)
+                        if oFuncionario:salvar()
+                            MsgInfo("Histórico registrado com sucesso!", "Sucesso")
+                        endif
+                    endif
+
+                case nOpcao == 6
+                    // Demitir funcionário
+                    local dDataDem as date
+
+                    oFuncionario := rh.FuncionariosControl():new(cMatricula)
+                    @ 14, 01 say "Data Demissão: " get dDataDem
+                    read
+
+                    if oFuncionario:demitir(dDataDem)
+                        if oFuncionario:salvar()
+                            MsgInfo("Funcionário demitido com sucesso!", "Sucesso")
+                        endif
+                    endif
+
+            endcase
+
+        catch oError
+            MsgStop(oError:Description, "Erro")
+        endtry
+
+    enddo
+
+return

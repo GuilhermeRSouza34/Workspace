@@ -1,0 +1,169 @@
+#include "tlpp-core.th"
+#include "tlpp-rest.th"
+
+namespace estoque
+
+/*/{Protheus.doc} RelatorioMovEstoque
+Classe para geracao de relatorios de movimentacao de estoque
+@type class
+@author Guilherme Souza
+@since 2025
+/*/
+class RelatorioMovEstoque
+    private
+        data dDataIni as date
+        data dDataFim as date
+        data cProduto as character
+        data cTipoMov as character
+        data cArmazem as character
+        data aMovimentos as array
+
+    public
+        method new() as object
+        method setFiltros(dIni as date, dFim as date, cProd as character, cTipo as character, cArm as character) as logical
+        method processar() as logical
+        method getTotais() as array
+        method exportarExcel() as logical
+endclass
+
+method new() as object
+    ::aMovimentos := {}
+return self
+
+method setFiltros(dIni as date, dFim as date, cProd as character, cTipo as character, cArm as character) as logical
+    local lRet := .T.
+
+    if dIni > dFim
+        UserException("Data inicial nao pode ser maior que data final")
+    endif
+
+    ::dDataIni := dIni
+    ::dDataFim := dFim
+    ::cProduto := cProd
+    ::cTipoMov := cTipo
+    ::cArmazem := cArm
+
+return lRet
+
+method processar() as logical
+    local lRet := .T.
+    local oEstoque as object
+    local aDados as array
+
+    dbSelectArea("SB2")
+    dbSetOrder(1)
+
+    while !EOF()
+        if (empty(::cProduto) .or. SB2->B2_COD == ::cProduto) .and.\
+           (empty(::cArmazem) .or. SB2->B2_LOCAL == ::cArmazem)
+
+            oEstoque := estoque.GerenciaEstoque():new(SB2->B2_COD, SB2->B2_QATU, ::cTipoMov)
+            aDados := oEstoque:getDados()
+            aadd(::aMovimentos, aDados)
+        endif
+        dbSkip()
+    enddo
+
+return lRet
+
+method getTotais() as array
+    local aTotais := {0,0} // {Entradas, Saidas}
+    local nI
+
+    for nI := 1 to len(::aMovimentos)
+        if ::aMovimentos[nI,3] == "E"
+            aTotais[1] += ::aMovimentos[nI,2]
+        else
+            aTotais[2] += ::aMovimentos[nI,2]
+        endif
+    next
+
+return aTotais
+
+method exportarExcel() as logical
+    local lRet := .T.
+    local oExcel
+    local nI
+
+    oExcel := MSExcel():New()
+    oExcel:WorkBooks:Add()
+    oExcel:WorkBooks:Open()
+
+    // Cabecalho
+    oExcel:AddWorkSheet("Movimentacoes")
+    oExcel:AddTable("Movimentacoes", "Relatorio de Movimentacoes")
+    oExcel:SetCelBold(.T.)
+    oExcel:SetCelFont("Arial")
+    oExcel:SetCelSize(12)
+
+    // Colunas
+    oExcel:AddColumn("Movimentacoes", "Relatorio de Movimentacoes", "Produto", 1, 1)
+    oExcel:AddColumn("Movimentacoes", "Relatorio de Movimentacoes", "Quantidade", 2, 2)
+    oExcel:AddColumn("Movimentacoes", "Relatorio de Movimentacoes", "Tipo", 3, 1)
+    oExcel:AddColumn("Movimentacoes", "Relatorio de Movimentacoes", "Armazem", 4, 1)
+    oExcel:AddColumn("Movimentacoes", "Relatorio de Movimentacoes", "Documento", 5, 1)
+
+    // Dados
+    for nI := 1 to len(::aMovimentos)
+        oExcel:AddRow("Movimentacoes", "Relatorio de Movimentacoes",\
+            {::aMovimentos[nI,1],\
+             ::aMovimentos[nI,2],\
+             ::aMovimentos[nI,3],\
+             ::aMovimentos[nI,4],\
+             ::aMovimentos[nI,5]})
+    next
+
+    oExcel:Activate()
+    oExcel:GetXMLFile("RelatorioMovimentacoes.xml")
+
+return lRet
+
+/*/{Protheus.doc} GeraRelatorioMov
+Funcao principal para interface com usuario
+@type function
+@author Guilherme Souza
+@since 2025
+/*/
+user function GeraRelatorioMov()
+    local dDataIni as date
+    local dDataFim as date
+    local cProduto as character
+    local cTipoMov as character
+    local cArmazem as character
+    local oRelatorio as object
+    local aTotais as array
+    local lSucesso as logical
+
+    // Interface com usuario
+    @ 01, 01 say "Data Inicial: " get dDataIni
+    @ 02, 01 say "Data Final: " get dDataFim
+    @ 03, 01 say "Codigo do Produto: " get cProduto
+    @ 04, 01 say "Tipo Movimentacao (E/S): " get cTipoMov
+    @ 05, 01 say "Armazem: " get cArmazem
+    read
+
+    try
+        oRelatorio := estoque.RelatorioMovEstoque():new()
+        lSucesso := oRelatorio:setFiltros(dDataIni, dDataFim, cProduto, cTipoMov, cArmazem)
+        
+        if lSucesso
+            lSucesso := oRelatorio:processar()
+            if lSucesso
+                aTotais := oRelatorio:getTotais()
+                MsgInfo("Total Entradas: " + cValToChar(aTotais[1]) + CRLF +\
+                       "Total Saidas: " + cValToChar(aTotais[2]), "Totais")
+                
+                if MsgYesNo("Deseja exportar para Excel?", "Exportacao")
+                    lSucesso := oRelatorio:exportarExcel()
+                    if lSucesso
+                        MsgInfo("Arquivo gerado com sucesso", "Sucesso")
+                    endif
+                endif
+            endif
+        endif
+
+    catch oError
+        MsgStop(oError:Description, "Erro")
+    endtry
+
+return
