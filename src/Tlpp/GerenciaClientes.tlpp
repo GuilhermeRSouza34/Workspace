@@ -7,7 +7,7 @@ namespace clientes
 Classe para gerenciamento de clientes
 @type class
 @author Guilherme Souza
-@since 2024
+@since 2025
 /*/
 class Cliente
     private
@@ -107,7 +107,7 @@ return aDados
 Funcao principal para interface com usuario
 @type function
 @author Guilherme Souza
-@since 2024
+@since 2025
 /*/
 user function CadastroCliente()
     local cCodigo as character
