@@ -7,7 +7,7 @@ namespace estoque
 Classe para gerenciamento de estoque de produtos
 @type class
 @author Guilherme Souza
-@since 2024
+@since 2025
 /*/
 class GerenciaEstoque
     private
@@ -95,7 +95,7 @@ return aDados
 Funcao principal para interface com usuario
 @type function
 @author Guilherme Souza
-@since 2024
+@since 2025
 /*/
 user function MovimentaEstoque()
     local cProduto as character
