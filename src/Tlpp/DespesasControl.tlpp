@@ -7,7 +7,7 @@ namespace despesas
 Classe para gerenciamento de despesas
 @type class
 @author Guilherme Souza
-@since 2024
+@since 2025
 /*/
 class DespesasControl
     private
@@ -223,7 +223,7 @@ return aDados
 Funcao principal para interface com usuario
 @type function
 @author Guilherme Souza
-@since 2024
+@since 2025
 /*/
 user function RegistrarDespesa()
     local cDescricao as character

@@ -7,7 +7,7 @@ namespace vendas
 Classe para gerenciamento de vendas
 @type class
 @author Guilherme Souza
-@since 2024
+@since 2025
 /*/
 class VendasControl
     private
@@ -178,7 +178,7 @@ return aDados
 Funcao principal para interface com usuario
 @type function
 @author Guilherme Souza
-@since 2024
+@since 2025
 /*/
 user function RealizarVenda()
     local cCliente as character
@@ -224,30 +224,30 @@ Funcao auxiliar para processar o fluxo de venda
 @param nPrecoUnit, numeric, Preco unitario
 @return logical, Indica se o processamento foi bem sucedido
 @author Guilherme Souza
-@since 2024
+@since 2025
 /*/
 static function ProcessarVenda(oVendas, cCliente, cProduto, nQuantidade, nPrecoUnit)
-    // Validação do cliente
+    // Validaï¿½ï¿½o do cliente
     if !oVendas:setCliente(cCliente)
         return .F.
     endif
 
-    // Validação do produto
+    // Validaï¿½ï¿½o do produto
     if !oVendas:setProduto(cProduto, nQuantidade, nPrecoUnit)
         return .F.
     endif
 
-    // Validação do estoque
+    // Validaï¿½ï¿½o do estoque
     if !oVendas:validarEstoque()
         return .F.
     endif
 
-    // Validação do credito
+    // Validaï¿½ï¿½o do credito
     if !oVendas:validarCredito()
         return .F.
     endif
 
-    // Gravação do pedido
+    // Gravaï¿½ï¿½o do pedido
     if !oVendas:gravarPedido()
         return .F.
     endif
