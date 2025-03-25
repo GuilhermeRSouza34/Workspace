@@ -171,7 +171,7 @@ return ::aResultado
 Funcao principal para interface com usuario
 @type function
 @author Guilherme Souza
-@since 2024
+@since 2025
 /*/
 user function ConsultarFaturamento()
     local dDataIni as date
