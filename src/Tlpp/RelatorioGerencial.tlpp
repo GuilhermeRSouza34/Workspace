@@ -1,0 +1,249 @@
+#include "tlpp-core.th"
+#include "tlpp-rest.th"
+#include "totvs.ch"
+#include "fwmvcdef.ch"
+
+namespace relatorios
+
+/*/{Protheus.doc} RelatorioGerencial
+Classe para geração de relatório gerencial integrando dados de gestores e faturamento
+@type class
+@author Trae AI
+@since 2025
+/*/
+class RelatorioGerencial
+    private
+        data dDataIni as date
+        data dDataFim as date
+        data cCliente as character
+        data cGrupo as character
+        data cFornec as character
+        data aResultado as array
+        data oExcel as object
+
+    public
+        method new() as object
+        method setFiltros(dDataI as date, dDataF as date, cCli as character, ;
+                         cGrp as character, cForn as character) as logical
+        method processar() as logical
+        method exportarExcel() as logical
+        method getResultado() as array
+endclass
+
+method new() as object
+    ::aResultado := array(0)
+return self
+
+method setFiltros(dDataI as date, dDataF as date, cCli as character, ;
+                 cGrp as character, cForn as character) as logical
+    local lRet := .T.
+
+    if empty(dDataI) .or. empty(dDataF)
+        UserException("Período inválido")
+    endif
+
+    ::dDataIni := dDataI
+    ::dDataFim := dDataF
+    ::cCliente := cCli
+    ::cGrupo := cGrp
+    ::cFornec := cForn
+
+return lRet
+
+method processar() as logical
+    local lRet := .T.
+    local cQuery := ""
+    local oQuery as object
+
+    begin sequence
+        // Monta query principal
+        cQuery := "SELECT "
+        cQuery += "    SA3.A3_COD, SA3.A3_NOME, "
+        cQuery += "    SA1.A1_COD, SA1.A1_LOJA, SA1.A1_NOME, SA1.A1_GRPVEN, "
+        cQuery += "    SA2.A2_COD, SA2.A2_LOJA, SA2.A2_NOME, "
+        cQuery += "    SF2.F2_DOC, SF2.F2_EMISSAO, SF2.F2_VALBRUT, "
+        cQuery += "    SD2.D2_QUANT, SD2.D2_PRCVEN, SD2.D2_TOTAL "
+        cQuery += "FROM " + RetSqlName("SF2") + " SF2 "
+        cQuery += "INNER JOIN " + RetSqlName("SD2") + " SD2 "
+        cQuery += "    ON SD2.D2_FILIAL = SF2.F2_FILIAL "
+        cQuery += "    AND SD2.D2_DOC = SF2.F2_DOC "
+        cQuery += "    AND SD2.D2_SERIE = SF2.F2_SERIE "
+        cQuery += "    AND SD2.D2_CLIENTE = SF2.F2_CLIENTE "
+        cQuery += "    AND SD2.D2_LOJA = SF2.F2_LOJA "
+        cQuery += "    AND SD2.D_E_L_E_T_ = ' ' "
+        cQuery += "INNER JOIN " + RetSqlName("SA1") + " SA1 "
+        cQuery += "    ON SA1.A1_FILIAL = SF2.F2_FILIAL "
+        cQuery += "    AND SA1.A1_COD = SF2.F2_CLIENTE "
+        cQuery += "    AND SA1.A1_LOJA = SF2.F2_LOJA "
+        cQuery += "    AND SA1.D_E_L_E_T_ = ' ' "
+        cQuery += "INNER JOIN " + RetSqlName("SA3") + " SA3 "
+        cQuery += "    ON SA3.A3_FILIAL = SF2.F2_FILIAL "
+        cQuery += "    AND SA3.A3_COD = SF2.F2_VEND1 "
+        cQuery += "    AND SA3.D_E_L_E_T_ = ' ' "
+        cQuery += "INNER JOIN " + RetSqlName("SA2") + " SA2 "
+        cQuery += "    ON SA2.A2_FILIAL = SD2.D2_FILIAL "
+        cQuery += "    AND SA2.A2_COD = SD2.D2_FORNECE "
+        cQuery += "    AND SA2.A2_LOJA = SD2.D2_LOJA "
+        cQuery += "    AND SA2.D_E_L_E_T_ = ' ' "
+        cQuery += "WHERE SF2.F2_FILIAL = '" + xFilial("SF2") + "' "
+        cQuery += "    AND SF2.F2_EMISSAO BETWEEN '" + DtoS(::dDataIni) + "' AND '" + DtoS(::dDataFim) + "' "
+        cQuery += "    AND SF2.D_E_L_E_T_ = ' ' "
+
+        // Filtros adicionais
+        if !empty(::cCliente)
+            cQuery += "    AND SF2.F2_CLIENTE = '" + ::cCliente + "' "
+        endif
+
+        if !empty(::cGrupo)
+            cQuery += "    AND SA1.A1_GRPVEN = '" + ::cGrupo + "' "
+        endif
+
+        if !empty(::cFornec)
+            cQuery += "    AND SD2.D2_FORNECE = '" + ::cFornec + "' "
+        endif
+
+        cQuery += "ORDER BY SF2.F2_EMISSAO, SF2.F2_DOC"
+
+        // Executa query
+        oQuery := FWPreparedStatement():new(cQuery)
+        ::aResultado := oQuery:getResult()
+
+        if len(::aResultado) == 0
+            UserException("Nenhum registro encontrado")
+        endif
+
+    recover
+        lRet := .F.
+    end sequence
+
+return lRet
+
+method exportarExcel() as logical
+    local lRet := .T.
+    local nLinha := 2
+    local nI
+
+    begin sequence
+        // Cria objeto Excel
+        ::oExcel := FWMsExcel():new()
+
+        // Define planilha e tabela
+        ::oExcel:addWorkSheet("Relatorio")
+        ::oExcel:addTable("Relatorio", "Relatório Gerencial")
+
+        // Define colunas
+        ::oExcel:addColumn("Relatorio", "Relatório Gerencial", "Gestor Código", 1, 1)
+        ::oExcel:addColumn("Relatorio", "Relatório Gerencial", "Gestor Nome", 1, 1)
+        ::oExcel:addColumn("Relatorio", "Relatório Gerencial", "Cliente Código", 1, 1)
+        ::oExcel:addColumn("Relatorio", "Relatório Gerencial", "Cliente Loja", 1, 1)
+        ::oExcel:addColumn("Relatorio", "Relatório Gerencial", "Cliente Nome", 1, 1)
+        ::oExcel:addColumn("Relatorio", "Relatório Gerencial", "Grupo Cliente", 1, 1)
+        ::oExcel:addColumn("Relatorio", "Relatório Gerencial", "Fornecedor Código", 1, 1)
+        ::oExcel:addColumn("Relatorio", "Relatório Gerencial", "Fornecedor Loja", 1, 1)
+        ::oExcel:addColumn("Relatorio", "Relatório Gerencial", "Fornecedor Nome", 1, 1)
+        ::oExcel:addColumn("Relatorio", "Relatório Gerencial", "Nota Fiscal", 1, 1)
+        ::oExcel:addColumn("Relatorio", "Relatório Gerencial", "Data Emissão", 1, 1)
+        ::oExcel:addColumn("Relatorio", "Relatório Gerencial", "Valor Bruto", 3, 2)
+        ::oExcel:addColumn("Relatorio", "Relatório Gerencial", "Quantidade", 3, 2)
+        ::oExcel:addColumn("Relatorio", "Relatório Gerencial", "Preço Unitário", 3, 2)
+        ::oExcel:addColumn("Relatorio", "Relatório Gerencial", "Valor Total", 3, 2)
+
+        // Preenche dados
+        for nI := 1 to len(::aResultado)
+            ::oExcel:addRow("Relatorio", "Relatório Gerencial", {
+                ::aResultado[nI, 1],  // Gestor Código
+                ::aResultado[nI, 2],  // Gestor Nome
+                ::aResultado[nI, 3],  // Cliente Código
+                ::aResultado[nI, 4],  // Cliente Loja
+                ::aResultado[nI, 5],  // Cliente Nome
+                ::aResultado[nI, 6],  // Grupo Cliente
+                ::aResultado[nI, 7],  // Fornecedor Código
+                ::aResultado[nI, 8],  // Fornecedor Loja
+                ::aResultado[nI, 9],  // Fornecedor Nome
+                ::aResultado[nI, 10], // Nota Fiscal
+                SToD(::aResultado[nI, 11]), // Data Emissão
+                ::aResultado[nI, 12], // Valor Bruto
+                ::aResultado[nI, 13], // Quantidade
+                ::aResultado[nI, 14], // Preço Unitário
+                ::aResultado[nI, 15]  // Valor Total
+            })
+            nLinha++
+        next
+
+        // Salva arquivo
+        ::oExcel:Activate()
+        ::oExcel:GetXMLFile("RelatorioGerencial_" + DToS(Date()) + ".xml")
+
+    recover
+        lRet := .F.
+    end sequence
+
+return lRet
+
+method getResultado() as array
+return ::aResultado
+
+/*/{Protheus.doc} u_RelGerencial
+Função principal para interface com usuário
+@type function
+@author Trae AI
+@since 2025
+/*/
+user function RelGerencial()
+    local dDataIni as date
+    local dDataFim as date
+    local cCliente as character
+    local cGrupo as character
+    local cFornec as character
+    local oRelatorio as object
+    local lExcel as logical
+
+    // Parâmetros
+    @ 01, 01 clear to 20, 75
+    @ 01, 01 say "=== Relatório Gerencial ==="
+    @ 03, 01 say "Data Inicial: " get dDataIni
+    @ 04, 01 say "Data Final: " get dDataFim
+    @ 05, 01 say "Cliente (opcional): " get cCliente
+    @ 06, 01 say "Grupo Cliente (opcional): " get cGrupo
+    @ 07, 01 say "Fornecedor (opcional): " get cFornec
+    @ 08, 01 say "Exportar Excel? (S/N): " get lExcel picture "@!" valid lExcel $ "SN"
+    read
+
+    if LastKey() == 27
+        return
+    endif
+
+    try
+        oRelatorio := relatorios.RelatorioGerencial():new()
+
+        if !oRelatorio:setFiltros(dDataIni, dDataFim, cCliente, cGrupo, cFornec)
+            return
+        endif
+
+        if !oRelatorio:processar()
+            return
+        endif
+
+        if lExcel == "S"
+            if oRelatorio:exportarExcel()
+                MsgInfo("Relatório gerado com sucesso!", "Sucesso")
+            else
+                MsgStop("Erro ao gerar relatório Excel", "Erro")
+            endif
+        else
+            // Exibe em tela
+            BrowseArray(oRelatorio:getResultado(), "Relatório Gerencial", {
+                {"Gestor", "C", 40, 0},
+                {"Cliente", "C", 40, 0},
+                {"Fornecedor", "C", 40, 0},
+                {"Nota Fiscal", "C", 10, 0},
+                {"Data", "D", 10, 0},
+                {"Valor Total", "N", 15, 2}
+            })
+        endif
+
+    catch oError
+        MsgStop(oError:Description, "Erro")
+    endtry
+
+return

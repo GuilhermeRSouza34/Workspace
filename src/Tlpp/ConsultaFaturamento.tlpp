@@ -1,0 +1,236 @@
+#include "path/to/tlpp-core.th"
+#include "path/to/tlpp-rest.th"
+
+namespace faturamento
+
+/*/{Protheus.doc} ConsultaFaturamento
+Classe para consulta de faturamento por período, cliente ou produto
+@type class
+@author Guilherme Souza
+@since 2025
+/*/
+class ConsultaFaturamento
+    private
+        data dDataInicio as date
+        data dDataFim as date
+        data cCliente as character
+        data cProduto as character
+        data aResultado as array
+
+    public
+        method new() as object
+        method setPeriodo(dDataIni as date, dDataFim as date) as logical
+        method setCliente(cCli as character) as logical
+        method setProduto(cProd as character) as logical
+        method validarDados() as logical
+        method consultarFaturamento() as logical
+        method getResultado() as array
+endclass
+
+method new() as object
+    ::aResultado := array(0)
+return self
+
+method setPeriodo(dDataIni as date, dDataFim as date) as logical
+    local lRet := .T.
+
+    if empty(dDataIni) .or. empty(dDataFim)
+        UserException("Datas nao podem ser vazias")
+    endif
+
+    if dDataIni > dDataFim
+        UserException("Data inicial nao pode ser maior que data final")
+    endif
+
+    ::dDataInicio := dDataIni
+    ::dDataFim := dDataFim
+
+return lRet
+
+method setCliente(cCli as character) as logical
+    local lRet := .T.
+
+    if !empty(cCli)
+        if Select("SA1") == 0
+            UserException("Tabela de clientes nao esta aberta")
+        endif
+
+        SA1->(dbSetOrder(1))
+        if !SA1->(dbSeek(xFilial("SA1") + cCli))
+            UserException("Cliente nao encontrado")
+        endif
+    endif
+
+    ::cCliente := cCli
+
+return lRet
+
+method setProduto(cProd as character) as logical
+    local lRet := .T.
+
+    if !empty(cProd)
+        if Select("SB1") == 0
+            UserException("Tabela de produtos nao esta aberta")
+        endif
+
+        SB1->(dbSetOrder(1))
+        if !SB1->(dbSeek(xFilial("SB1") + cProd))
+            UserException("Produto nao encontrado")
+        endif
+    endif
+
+    ::cProduto := cProd
+
+return lRet
+
+method validarDados() as logical
+    local lRet := .T.
+
+    if empty(::dDataInicio) .or. empty(::dDataFim)
+        UserException("Periodo nao definido")
+    endif
+
+    if empty(::cCliente) .and. empty(::cProduto)
+        UserException("Defina pelo menos um filtro: cliente ou produto")
+    endif
+
+return lRet
+
+method consultarFaturamento() as logical
+    local lRet := .T.
+    local cQuery as character
+    local oQuery as object
+    local nTotal as numeric
+    local aLinha as array
+
+    if !::validarDados()
+        return .F.
+    endif
+
+    begin sequence
+        // Monta query base
+        cQuery := "SELECT F2_DOC, F2_SERIE, F2_CLIENTE, F2_LOJA, F2_EMISSAO, "
+        cQuery += "D2_COD, D2_QUANT, D2_PRCVEN, D2_TOTAL "
+        cQuery += "FROM " + RetSqlName("SF2") + " SF2 "
+        cQuery += "INNER JOIN " + RetSqlName("SD2") + " SD2 ON "
+        cQuery += "D2_FILIAL = F2_FILIAL AND "
+        cQuery += "D2_DOC = F2_DOC AND "
+        cQuery += "D2_SERIE = F2_SERIE AND "
+        cQuery += "D2_CLIENTE = F2_CLIENTE AND "
+        cQuery += "D2_LOJA = F2_LOJA AND "
+        cQuery += "SD2.D_E_L_E_T_ = ' ' "
+        cQuery += "WHERE SF2.D_E_L_E_T_ = ' ' "
+        cQuery += "AND F2_EMISSAO BETWEEN '" + DtoS(::dDataInicio) + "' AND '" + DtoS(::dDataFim) + "' "
+
+        // Adiciona filtros
+        if !empty(::cCliente)
+            cQuery += "AND F2_CLIENTE = '" + ::cCliente + "' "
+        endif
+
+        if !empty(::cProduto)
+            cQuery += "AND D2_COD = '" + ::cProduto + "' "
+        endif
+
+        cQuery += "ORDER BY F2_EMISSAO"
+
+        // Executa query
+        oQuery := FWPreparedStatement():new(cQuery)
+        if (oQuery:execute() != 0)
+            UserException("Erro ao executar consulta")
+        endif
+
+        // Processa resultados
+        while !(oQuery:eof())
+            aLinha := array(9)
+            aLinha[1] := oQuery:getValue("F2_DOC")
+            aLinha[2] := oQuery:getValue("F2_SERIE")
+            aLinha[3] := oQuery:getValue("F2_CLIENTE")
+            aLinha[4] := oQuery:getValue("F2_LOJA")
+            aLinha[5] := StoD(oQuery:getValue("F2_EMISSAO"))
+            aLinha[6] := oQuery:getValue("D2_COD")
+            aLinha[7] := oQuery:getValue("D2_QUANT")
+            aLinha[8] := oQuery:getValue("D2_PRCVEN")
+            aLinha[9] := oQuery:getValue("D2_TOTAL")
+            aadd(::aResultado, aLinha)
+            oQuery:skip()
+        enddo
+
+        oQuery:close()
+        FreeObj(oQuery)
+
+    recover
+        lRet := .F.
+    end sequence
+
+return lRet
+
+method getResultado() as array
+return ::aResultado
+
+/*/{Protheus.doc} ConsultarFaturamento
+Funcao principal para interface com usuario
+@type function
+@author Guilherme Souza
+@since 2025
+/*/
+user function ConsultarFaturamento()
+    local dDataIni as date
+    local dDataFim as date
+    local cCliente as character
+    local cProduto as character
+    local oConsulta as object
+    local aResultado as array
+    local nI as numeric
+    local nTotal as numeric
+
+    // Interface com usuario
+    @ 01, 01 say "Data Inicial: " get dDataIni
+    @ 02, 01 say "Data Final: " get dDataFim
+    @ 03, 01 say "Cliente (opcional): " get cCliente
+    @ 04, 01 say "Produto (opcional): " get cProduto
+    read
+
+    try
+        // Cria objeto e realiza consulta
+        oConsulta := faturamento.ConsultaFaturamento():new()
+        
+        // Configura parametros
+        if !oConsulta:setPeriodo(dDataIni, dDataFim)
+            return
+        endif
+
+        if !oConsulta:setCliente(cCliente)
+            return
+        endif
+
+        if !oConsulta:setProduto(cProduto)
+            return
+        endif
+
+        // Executa consulta
+        if !oConsulta:consultarFaturamento()
+            return
+        endif
+
+        // Processa e exibe resultados
+        aResultado := oConsulta:getResultado()
+        if len(aResultado) == 0
+            MsgInfo("Nenhum resultado encontrado", "Aviso")
+            return
+        endif
+
+        // Calcula total
+        nTotal := 0
+        for nI := 1 to len(aResultado)
+            nTotal += aResultado[nI, 9]
+        next
+
+        // Exibe resultados
+        MsgInfo("Total de notas: " + cValToChar(len(aResultado)) + CRLF + ;
+                "Valor total: R$ " + Transform(nTotal, "@E 999,999,999.99"), "Resultado")
+
+    catch oError
+        MsgStop(oError:Description, "Erro")
+    endtry
+
+return
