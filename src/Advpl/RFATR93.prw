@@ -8,7 +8,7 @@
 /*-------------------------------------------------------------------------------*
  | Programa 	: RFATR93.PRW										 |
  | Data 		: 09/10/2025										 |
- | Autor    	: Trae AI            	    	                		 |
+ | Autor    	: Guilherme Souza            	    	                		 |
  | Uso      	: Relatorio de vendas por produto com ranking                    	 |
  *-------------------------------------------------------------------------------*/
 
