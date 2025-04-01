@@ -1,8 +1,8 @@
 /*/{Protheus.doc} Smart Document Scanner
     @type  function
     @version  1.0
-    @author  Assistant
-    @since   01/01/2024
+    @author  Guilherme
+    @since   31/03/2025
     @obs     Smart Document Scanner for Protheus
     @see     https://github.com/totvs
 */
