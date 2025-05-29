@@ -21,7 +21,6 @@
     com varios itens de uma unica vez.
 
     @type  Function
-    @author Súlivan SimÃµes (sulivansimoes@gmail.com)
     @since 11/12/2021
     @version 1.0
     @see https://tdn.totvs.com/pages/releaseview.action?pageId=243651808
