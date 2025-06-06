@@ -3,8 +3,8 @@
 
 /*/{Protheus.doc} User Function AEXCL001
 Importação de dados para o Ativo Fixo
-@author Atilio
-@since 12/11/2022
+@author Guilherme
+@since 06/06/2025
 @version 1.0
 @type function
 /*/
