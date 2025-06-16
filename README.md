@@ -35,7 +35,7 @@ Este repositório tem como objetivo documentar todo o meu aprendizado, estudos e
 - Aprender a escrever códigos limpos, organizados e eficientes.
 - Aplicar técnicas de depuração e log para identificar e resolver problemas.
 - Adotar padrões de qualidade em testes e validações.
-
+S
 ### **6. Segurança no Protheus**
 - Configurar permissões e acessos no ambiente ERP.
 - Desenvolver rotinas que assegurem a proteção de dados empresariais.
@@ -61,7 +61,7 @@ Este repositório tem como objetivo documentar todo o meu aprendizado, estudos e
 
 ---
 
-### **Acompanhe minha jornada!!**
+### **Acompanhe minha jornada**
 
 Este repositório será constantemente atualizado com novos aprendizados, projetos e insights. Se você também está no caminho para se tornar um Desenvolvedor TOTVS, fique à vontade para explorar, contribuir ou trocar ideias!!
 
