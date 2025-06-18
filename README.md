@@ -62,7 +62,6 @@ S
 ---
 
 ### **Acompanhe minha jornada**
-
 Este repositório será constantemente atualizado com novos aprendizados, projetos e insights. Se você também está no caminho para se tornar um Desenvolvedor TOTVS, fique à vontade para explorar, contribuir ou trocar ideias!!
 
 Vamos juntos conquistar o conhecimento e fazer a diferença no mercado de tecnologia! 🚀
