@@ -5,7 +5,6 @@
 /*/{Protheus.doc} User Function APCPM03
 Função que aciona o sincronismo para criação da SBZ (essa função é para ser adicionada no menu)
 @type  Function
-@author Atilio
 @since 14/09/2024
 /*/
 
