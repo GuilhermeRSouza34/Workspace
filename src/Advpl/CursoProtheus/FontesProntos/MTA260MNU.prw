@@ -4,7 +4,6 @@
 /*/{Protheus.doc} User Function MTA260MNU
 Ponto de entrada para inserir opção no menu na tela de Transferência Modelo 1
 @type  Function
-@author Atilio
 @since 09/04/2021
 @version 1.0
 @see https://tdn.totvs.com/pages/releaseview.action?pageId=6087760
