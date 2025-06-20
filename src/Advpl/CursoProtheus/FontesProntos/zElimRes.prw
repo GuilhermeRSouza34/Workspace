@@ -4,7 +4,6 @@
 /*/{Protheus.doc} User Function zElimRes
 Função que executa a eliminação de resíduo de forma automática
 @type  Function
-@author Atilio
 @since 03/09/2021
 /*/
 
