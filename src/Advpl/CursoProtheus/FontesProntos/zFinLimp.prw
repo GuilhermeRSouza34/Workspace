@@ -5,7 +5,6 @@
 /*/{Protheus.doc} User Function zFinLimp
 Função que realiza a limpeza de tabelas do financeiro baixando títulos em aberto como dação
 @type  Function
-@author Atilio
 @since 04/04/2022
 /*/
 
