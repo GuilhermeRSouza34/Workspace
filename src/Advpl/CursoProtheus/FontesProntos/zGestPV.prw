@@ -14,8 +14,6 @@
     > Centraliza funções de pedido de venda em um único lugar
 
     @type  Function
-    @author Súlivan Simoes (sulivansimoes@gmail.com)
-    @since 10/01/2022
     @version 1.0
     @example
         u_zGestPV()    
