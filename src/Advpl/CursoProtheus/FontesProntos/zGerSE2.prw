@@ -4,8 +4,6 @@
 
 /*/{Protheus.doc} zGerSE2
 Função que gera títulos a pagar
-@author Atilio
-@since 18/12/2017
 @version 1.0
 @type function
 /*/
