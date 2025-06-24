@@ -4,8 +4,6 @@
 /*/{Protheus.doc} User Function zImgProd
 Realiza a importação de imagens para o repositório do Protheus
 @type  Function
-@author Atilio
-@since 07/05/2021
 @version version
 @obs Essa função executa a importação para o arquivo SIGAADV.BMR, se necessário altere o nome do
     Repositório na linha 59
