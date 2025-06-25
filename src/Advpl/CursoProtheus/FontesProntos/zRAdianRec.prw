@@ -24,8 +24,6 @@ Static nCorAzul   := RGB(062,179,206)
 
 /*/{Protheus.doc} zRAdianRec
 Impressão gráfica de Adiantamentos de Clientes (Tí­tulos RA)
-@author Atilio
-@since 29/08/2016
 @version 1.0
 @param cXCodCli, caracter, Código do Cliente
 @param cXLojCli, caracter, Loja do Cliente
