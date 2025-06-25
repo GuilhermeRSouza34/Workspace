@@ -3,8 +3,6 @@
 
 /*/{Protheus.doc} User Function zListNF
 Listagem de NFs
-@author Daniel Atilio
-@since 04/08/2020
 @version 1.0
 @type function
 /*/
@@ -37,8 +35,6 @@ Return
 
 /*/{Protheus.doc} fGeraExcel
 Criacao do arquivo Excel na funcao zListNF
-@author Daniel Atilio
-@since 04/08/2020
 @version 1.0
 @type function
 /*/
