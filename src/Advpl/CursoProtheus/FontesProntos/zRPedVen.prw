@@ -49,8 +49,6 @@ Static cMaskPLiq  := PesqPict("SC5", "C5_PESOL")                                
 /*/{Protheus.doc} zRPedVen
 Impressão gráfica genérica de Pedido de Venda (em pdf)
 @type function
-@author Atilio
-@since 19/06/2016
 @version 1.0
 	@example
 	u_zRPedVen()
