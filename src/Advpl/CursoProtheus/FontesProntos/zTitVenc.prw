@@ -4,8 +4,6 @@
 
 /*/{Protheus.doc} zTitVenc
 Job que notifica os títulos vencidos para clientes
-@author Atilio
-@since 10/09/2021
 @version 1.0
 @example
 u_zTitVenc()
