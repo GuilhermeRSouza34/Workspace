@@ -4,8 +4,6 @@
 /*/{Protheus.doc} User Function zTransPed
 Função para tranferência do pedido entre as filiais
 @type  Function
-@author Atilio
-@since 07/08/2021
 /*/
 
 User Function zTransPed()
