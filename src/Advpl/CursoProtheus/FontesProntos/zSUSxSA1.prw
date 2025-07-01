@@ -5,8 +5,6 @@
 /*/{Protheus.doc} User Function zSUSxSA1
 Função para transformar cadastros da SUS (prospects) para SA1 (clientes)
 @type  Function
-@author Atilio
-@since 12/05/2021
 @version version
 @param param_name, param_type, param_descr
 @return return_var, return_type, return_description
