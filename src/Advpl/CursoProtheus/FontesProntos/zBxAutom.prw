@@ -5,8 +5,6 @@
 /*/{Protheus.doc} User Function zBxAutom
 Função que realiza a baixa automaticamente de títulos a receber
 @type  Function
-@author Atilio
-@since 04/06/2021
 @version version
 /*/
 
