@@ -3,8 +3,6 @@
   
 /*/{Protheus.doc} zAtuPerg
 Função que atualiza o conteúdo de uma pergunta no X1_CNT01 / SXK / Profile
-@author Atilio
-@since 06/10/2016
 @version 1.0
 @type function
     @param cPergAux, characters, Código do grupo de Pergunta
