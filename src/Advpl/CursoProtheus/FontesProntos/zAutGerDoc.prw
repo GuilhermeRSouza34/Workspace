@@ -11,8 +11,6 @@
     > Impressão da NF-e em PDF
 
     @type  Function
-    @author Súlivan Simoes (sulivansimoes@gmail.com)
-    @since 10/01/2022
     @version 1.0
     @example
         u_zAutGerDoc()    
