@@ -15,8 +15,6 @@ Static nCorCinza  := RGB(200, 200, 200)
 
 /*/{Protheus.doc} zROpEtiq
 Impressão de etiquetas de Ordem de Produção em pdf
-@author Atilio
-@since 24/08/2016
 @version 1.0
 @type function
 /*/

@@ -10,8 +10,6 @@
     Para ativar a tela de parametros após adentrar na rotina, basta usar a tecla F12
 
     @type  Function
-    @author Súlivan Simões (sulivansimoes@gmail.com)
-    @since 12/02/2022
     @example
        U_zKardexT()
 

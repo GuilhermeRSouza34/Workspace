@@ -21,8 +21,6 @@ Static nCorAzul  := RGB(163, 203, 255)
 /*/{Protheus.doc} zRelUsers
     Relatório traz informações dos usuários de acordo com o filtros informados
     @type  Function
-    @author Súlivan Simões (sulivansimoes@gmail.com)    
-    @since 28/08/2022
     @version 1.0    
     @return Unidefied
     @see Link Totvs

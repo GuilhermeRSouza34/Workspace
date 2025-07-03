@@ -15,8 +15,6 @@ Static nCorAzul  := RGB(193, 231, 253)
 /*/{Protheus.doc} User Function zRelAniv
 Função que gera o relatório de aniversariantes do dia
 @type  Function
-@author Atilio
-@since 03/09/2021
 @version version
 /*/
 

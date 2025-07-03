@@ -8,8 +8,6 @@ Static nTransQry := 1  //Define se o texto da query irá passar por transformação
 /*/{Protheus.doc} User Function zTiSQL
 Função do Terminal de Informação para executar queries SQL em bases Protheus
 @type  Function
-@author Atilio
-@since 19/12/2020
 @version version
 @example
     u_zTiSQL()

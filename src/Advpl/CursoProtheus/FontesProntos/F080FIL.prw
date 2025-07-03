@@ -4,7 +4,6 @@
 /*/{Protheus.doc} User Function F080FIL
 Filtro na tela de baixa por lote
 @type  Function
-@author Atilio
 @since 23/01/2021
 @version version
 @return cRetorno, character, Expressão de retorno

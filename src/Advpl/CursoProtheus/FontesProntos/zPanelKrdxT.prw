@@ -31,8 +31,6 @@ Static nCorAzul  := RGB(193, 231, 253)
 	da consulta Kardex de porder de terceiro. 
 	Além disso, também oferece a opção para imprimir os resultados em PDF
 
-	@author Súlivan Simões (sulivansimoes@gmail.com)
-	@since 02/2022
 	@version 1.0
 /*/
 Class zPainelKrdxT

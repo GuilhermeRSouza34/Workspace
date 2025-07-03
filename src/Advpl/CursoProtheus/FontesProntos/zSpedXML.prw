@@ -3,8 +3,6 @@
     
 /*/{Protheus.doc} zSpedXML
 Função que gera o arquivo xml da nota (normal ou cancelada) através do documento e da série disponibilizados
-@author Atilio
-@since 25/07/2017
 @version 1.0
 @param cDocumento, characters, Código do documento (F2_DOC)
 @param cSerie, characters, Série do documento (F2_SERIE)
