@@ -11,6 +11,9 @@ Data e link do rdmake padrao utilizado/adaptado
 Link: https://suporte.totvs.com/portal/p/10098/customer-portal-dashboard/services/downloads?e=1083734
 Data fonte: 09/10/2023
 
+
+
+
 @type user function
 @since 09/2024
 @version 1.0.0
@@ -320,6 +323,7 @@ EndIf*/
 PixelX  := oDacte:nLogPixelX()
 PixelY  := oDacte:nLogPixelY()
 nMM     := 0
+
 
 //PERSONALIZADO: INICIO COMENTADO
 //While !(cAliasCT)->(Eof())
