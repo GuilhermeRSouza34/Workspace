@@ -12,7 +12,6 @@ Link: https://suporte.totvs.com/portal/p/10098/customer-portal-dashboard/service
 Data fonte: 09/10/2023
 
 @type user function
-@author Sulivan Simoes (sulivansimoes@gmail.com)
 @since 09/2024
 @version 1.0.0
 /*/
