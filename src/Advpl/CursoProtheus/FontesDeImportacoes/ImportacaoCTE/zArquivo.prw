@@ -4,7 +4,6 @@
 /*/{Protheus.doc} zArquivo 
 @description Classe fornece metodos para manipular arquivos com qualquer extensao no remote e no servidor.
              Tem o objetivo de centralizar essas tarefas. 
-@author  	 Sulivan Simoes - ( sulivan@atiliosistemas.com )
 @version     1.0
 @since      02/2020
 @see	Links Totvs
