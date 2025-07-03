@@ -8,8 +8,6 @@ Static nPosPreco := 2
 
 /*/{Protheus.doc} zImpDA1
 Função para importar os itens da tabela de preço
-@author Atilio
-@since 21/03/2017
 @version 1.0
 @type function
 @obs O ideal é sempre fazer via MsExecAuto inclusões, porém como a tabela de preço, em alguns lugares pode passar de

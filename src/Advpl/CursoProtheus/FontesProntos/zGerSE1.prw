@@ -4,7 +4,6 @@
 
 /*/{Protheus.doc} zGerSE1
 Função que gera títulos a receber
-@author Atilio
 @since 20/12/2017
 @version 1.0
 @type function

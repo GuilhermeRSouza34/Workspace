@@ -3,7 +3,6 @@
 
 /*/{Protheus.doc} User Function MT010INC
 Após inclusão do produto
-@author Atilio
 @since 14/09/2024
 @version 1.0
 @see https://tdn.totvs.com/pages/releaseview.action?pageId=6087685

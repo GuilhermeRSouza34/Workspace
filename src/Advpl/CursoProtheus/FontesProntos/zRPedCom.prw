@@ -41,8 +41,6 @@ Static cMaskFrete := PesqPict("SC7", "C7_VALFRE")                               
 /*/{Protheus.doc} zRPedCom
 Impressão gráfica genérica de Pedido de Compra (em pdf)
 @type function
-@author Atilio
-@since 06/01/2019
 @version 1.0
 	@example
 	u_zRPedCom()

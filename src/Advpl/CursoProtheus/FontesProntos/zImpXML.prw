@@ -2,15 +2,12 @@
 
 /*/{Protheus.doc} zImpXML
 Função criada para importar os xmls de fornecedores com opção de pré nota ou classificar direto em Documento de Entrada
-@author Atilio
-@since 06/07/2017
 @version 1.0
 @type function
 
 @obs: 	MANUTENÇÕES REALIZADAS NO CÓDIGO
 		----------------------------------------------------------------------------------------------------
 		Data: 16/03/2025
-		Responsável: Súlivan (sulivan@atiliosistemas.com)
 		Log: * Atualização de bibliotecas
 			 * Ajuste para acionar a rotina MATA140 atraves de execAuto, ao invés de acionar diretamente a função
 			 * Substituído GetArea e RestArea por FwGetArea e FwRestArea respectivamente

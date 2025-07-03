@@ -16,7 +16,6 @@
         .T. - Para efetuar a exclusão do registro. .F. - Não efetua a exclusão do registro.
 
     @type  Function
-    @author Súlivan Simoes (sulivansimoes@gmail.com)
     @since 18/12/2021
     @version 1.0
     @see https://tdn.totvs.com/pages/releaseview.action?pageId=6087984
