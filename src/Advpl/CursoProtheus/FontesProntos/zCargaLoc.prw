@@ -5,8 +5,6 @@
 /*/{Protheus.doc} User Function zCargaLoc
 Função responsável por dar a carga de dados inicial em uma base de dados local
 @type  Function
-@author Atilio
-@since 18/10/2021
 @version version
 @example u_zCargaLoc()
 /*/
