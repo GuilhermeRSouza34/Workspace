@@ -4,8 +4,6 @@
 /*/{Protheus.doc} User Function zCSSGrid
 Altera o tamanho do texto usado nas grids antigas (MsNewGetDados e MsSelect)
 @type  Function
-@author Atilio
-@since 18/08/2021
 @version version
 @param nTamFonte, Numeric, Tamanho da fonte em pixels na grid
 @example
