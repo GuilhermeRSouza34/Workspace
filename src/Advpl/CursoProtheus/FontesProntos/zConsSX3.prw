@@ -3,8 +3,6 @@
  
 /*/{Protheus.doc} zConsSX3
 Função para consulta genérica do dicionário
-@author Daniel Atilio
-@since 30/09/2021
 @version 1.0
     @return lRetorn, retorno se a consulta foi confirmada ou não
     @obs O retorno da consulta é pública (__cRetorn) para ser usada em consultas específicas
