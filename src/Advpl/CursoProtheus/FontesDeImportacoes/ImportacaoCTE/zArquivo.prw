@@ -58,7 +58,6 @@ EndClass
 
 /*/{Protheus.doc} Constructor 
 @description Construtor da classe
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 /*/
 Method New() Class zArquivo As Object 
 	::setDiretorioOrigem("")
@@ -72,7 +71,6 @@ Return Self
 
 /*/{Protheus.doc} isSalvou 
 @description Retorna se o arquivo ja foi salvo ou nao.
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @return 	Logical, .T. caso ja tenha sido salvo e .F. caso contrario
 /*/
 Method isSalvou() Class zArquivo As Logical  
@@ -80,7 +78,6 @@ Return ::lSalvou
 
 /*/{Protheus.doc} getDiretorioOrigem 
 @description Retorna o diretorio de origem do arquivo.
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @return 	Character, diretorio origem.
 /*/
 Method getDiretorioOrigem() Class zArquivo As Character
@@ -88,7 +85,6 @@ Return ::cDirOrig
 
 /*/{Protheus.doc} getDiretorioDestino 
 @description Retorna o diretorio de destino do arquivo
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @return 	Character, diretorio destino.
 /*/
 Method getDiretorioDestino() Class zArquivo As Character
@@ -99,7 +95,6 @@ Return ::cExtensao
 
 /*/{Protheus.doc} getNomeArquivo 
 @description Retorna o nome que o arquivo possui
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @return 	Character, nome do arquivo
 /*/
 Method getNomeArquivo() Class zArquivo As Character 
@@ -108,7 +103,6 @@ Return ::cNomeArquivo
 /*/{Protheus.doc} isComprime 
 @description Retorna se no momento de envio do arquivo para o servidor
              ele deve ser comprimido antes. Eh usado no metodo salvaArquivoServidor]
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @return 	Logical, .T. caso seja para comprimir, .F. caso contrario
 /*/
 Method isComprime() Class zArquivo As Logical
@@ -116,7 +110,6 @@ Return ::lComprime
 
 /*/{Protheus.doc} getExtensoesValidas 
 @description Retorna todas as extensoes que são validas (poderao ser salvas)
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @return 	Array, extensoes que podem ser salvas
 /*/
 Method getExtensoesValidas() Class zArquivo As Array
@@ -124,7 +117,6 @@ Return ::aExtensoes
 
 /*/{Protheus.doc} setSalvou 
 @description Flag indicando se arquivo ja foi salvo ou nao.
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @param 		lSalvou, .T. caso arquivo ja tenha sido salvo .F. caso contrario
 @return 	Undefinied
 /*/
@@ -134,7 +126,6 @@ Return
 
 /*/{Protheus.doc} setExtensao 
 @description Altera propriedade que contem a extensao do arquivo origem
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @param 		Character, extensao do arquivo.
 @return 	Undefinied
 /*/ 
@@ -144,7 +135,6 @@ Return
 
 /*/{Protheus.doc} setDiretorioOrigem 
 @description Altera propriedade que contem diretorio origem
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @param 		Character, diretorio origem.
 @return 	Undefinied
 /*/  
@@ -157,7 +147,6 @@ Return
 
 /*/{Protheus.doc} setDiretorioDestino 
 @description Altera propriedade que contem diretorio destino do arquivo
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @param 		Character, diretorio destino (incluindo o nome e extensao do arquivo).
 @return 	Undefinied
 /*/
@@ -167,7 +156,6 @@ Return
 
 /*/{Protheus.doc} setNomeArquivo 
 @description Altera o nome do arquivo origem antes de ser copiado
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @param 		Caractsaor, diretorio destino (incluindo o nome e extensao do arquivo).
 @return 	Logical, .T. caso tenha conseguido alterar o nome, .F. caso contrario.
 /*/
@@ -204,7 +192,6 @@ Return Iif(nRet == -1,.F., .T.)
 /*/{Protheus.doc} setComprime 
 @description Altera propriedade que contem a propriedade que define se arquivo deve ou nao 
              ser comprmido antes de ser copiado.Eh usado no metodo salvaArquivoServidor]
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @param 		Logical, .T. caso deve ser comprimido .F. caso contrario
 @return 	Undefinied
 /*/
@@ -214,7 +201,6 @@ Return
 
 /*/{Protheus.doc} addExtensoesValidas 
 @description Adiciona quais extensoes poderao ser salvas
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @param 		Array, Array contendo extensoes validas exemplo {".mp4",".pdf",".jpg"}
 @return 	Undefinied
 /*/
@@ -232,7 +218,6 @@ Return
  
 /*/{Protheus.doc} isExtensaoValida 
 @description Retorna se extensao do arquivo sao validas ou nao. 
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @return 	Logical, .T. se extensao for validas, .F. caso contrario
 /*/
 Method isExtensaoValida() Class zArquivo As Logical  
@@ -251,7 +236,6 @@ Return lValida
 /*/{Protheus.doc} salvaArquivoServidor 
 @description Salva arquivo no diretorio destino localizado no Servidor. 
 			 diretorio precisa estar na raiz do Protheus_data. Exemplo \temp\
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @return 	Logical, .T. caso arquivo tenha sido salvo com sucesso, .F. caso contrario.
 /*/
 Method salvaArquivoServidor() Class zArquivo As Logical 
@@ -270,7 +254,6 @@ Return ::isSalvou()
 /*/{Protheus.doc} salvaArquivoNoLocalHost 
 @description Salva arquivo no diretorio destino localizado no smartcliet Local. 
 			 diretorio origem precisa estar na raiz do Protheus_data. Exemplo \temp\
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @return 	Logical, .T. caso arquivo tenha sido e  com sucesso, .F. caso contrario.     
 @obs		Para usar esse metodo o diretorio oritem e o destino devem estar com o nome + extensao do arquivo.  
 /*/
@@ -283,7 +266,6 @@ Return  ::isSalvou()
 
 /*/{Protheus.doc} removeArquivo 
 @description Deleta arquivo no diretorio 
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @param		Character, diretorio + nome do arquivo + extensao do arquivo a ser deletado.
 @return 	Logical, .T. caso arquivo tenha sido deletado com sucesso, .F. caso contrario.
 /*/
@@ -304,7 +286,6 @@ Return Iif(nRet == -1, .F., .T. )
 
 /*/{Protheus.doc} isArquivoExiste 
 @description Verifica arquivo no diretorio 
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @param		Character, diretorio + nome do arquivo + extensao do arquivo a ser verificado.			
 @return 	Logical, .T. caso arquivo tenha sidoexista no diretorio, .F. caso contrario.
 /*/
@@ -313,7 +294,6 @@ Return File(cArquivo)
 
 /*/{Protheus.doc} getSizeArquivo 
 @description retorna o tamanho do arquivo em bytes 
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @param		Character, diretorio + nome do arquivo + extensao do arquivo a ser verificado.
 			caso nao seja informado esse parametro será considerado o arquivo que está no diretorio origem.
 @return 	Numeric, tamaho do arquivo am Bytes. Caso nao consiga abrir o arquivo retorna -1
@@ -336,7 +316,6 @@ Return nBytes
 
 /*/{Protheus.doc} escreveArquivo  
 @description Permite escrever e salvar um arquivo texto.
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @param		Character, diretorio + nome do arquivo + extensao do arquivo a ser escrito/criado.
 @param		Character, Texto que deve ser escrito no arquivo.			
 @return 	Logical, .T. caso arquivo tenha sido criado no diretorio, .F. caso contrario.
@@ -352,7 +331,6 @@ Return lEscreveu
  
 /*/{Protheus.doc} escreveArquivo  
 @description Permite ler um arquivo texto.
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @param		Character, diretorio + nome do arquivo + extensao do arquivo a ser lido. Default sao o arquivoOrigem
 @return 	Character, Conteudo que foi lido no arquivo.
 /*/
@@ -363,7 +341,6 @@ Return 	MemoRead(Alltrim(cArquivo))
  
 /*/{Protheus.doc} editaArquivo  
 @description Permite editar arquivo de texto, inserindo um texto em seu final
-@author Sulivan Simoes (sulivan@atiliosistemas.com)
 @param		Character, diretorio + nome do arquivo + extensao do arquivo a ser editado. Default sao o arquivoOrigem
 @param 		Character, Texto que deverá ser adicionado ao arquivo.
 @param 		Logical, .T. caso seja para pular linha antes de começar a escrever, .F. caso contrario.
