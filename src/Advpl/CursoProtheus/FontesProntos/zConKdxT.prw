@@ -64,8 +64,6 @@ Return
 /*/{Protheus.doc} fConsulta
     Monta a consulta principal do Kardex com as movimentações, de acordo com as respostas do Pergunte
     @type  Static Function
-    @author Súlivan
-    @since 12/02/2022    
     @return cAliasTMP, Character, nome do alias (ResultSet) da consulta
 /*/
 Static Function fConsulta()
