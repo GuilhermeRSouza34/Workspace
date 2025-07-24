@@ -1,0 +1,340 @@
+#include "tlpp-core.th"
+#include "tlpp-rest.th"
+
+namespace consulta.estoque
+
+/*/{Protheus.doc} ConsultaEstoqueAPI
+API REST para consulta de estoque - Integração com PO-UI
+@type class
+@author Guilherme Souza
+@since 2025
+/*/
+@Rest ConsultaEstoqueAPI
+
+/*/{Protheus.doc} GetEstoque
+Endpoint para consulta de estoque com filtros
+@type method
+@author Guilherme Souza
+@since 2025
+@param codigoProduto, character, Código do produto (opcional)
+@param descricaoProduto, character, Descrição do produto (opcional)
+@param categoria, character, Categoria do produto (opcional)
+@param local, character, Local de estoque (opcional)
+@param somenteComSaldo, logical, Filtrar apenas produtos com saldo (opcional)
+@return object, JSON com lista de produtos em estoque
+/*/
+@Get("/consulta-estoque")
+method GetEstoque() as object class ConsultaEstoqueAPI
+    local oResponse as object
+    local aEstoque as array
+    local cCodigoProduto as character
+    local cDescricaoProduto as character
+    local cCategoria as character
+    local cLocal as character
+    local lSomenteComSaldo as logical
+
+    // Recupera parâmetros da requisição
+    cCodigoProduto := self:getQueryParam("codigoProduto", "")
+    cDescricaoProduto := self:getQueryParam("descricaoProduto", "")
+    cCategoria := self:getQueryParam("categoria", "")
+    cLocal := self:getQueryParam("local", "")
+    lSomenteComSaldo := Val(self:getQueryParam("somenteComSaldo", "0")) == 1
+
+    try
+        // Consulta o estoque com os filtros
+        aEstoque := ConsultarEstoque(cCodigoProduto, cDescricaoProduto, cCategoria, cLocal, lSomenteComSaldo)
+        
+        // Prepara resposta de sucesso
+        oResponse := JsonObject():new()
+        oResponse["success"] := .T.
+        oResponse["data"] := aEstoque
+        oResponse["message"] := "Consulta realizada com sucesso"
+        
+        self:setStatus(200)
+        
+    catch oError
+        // Prepara resposta de erro
+        oResponse := JsonObject():new()
+        oResponse["success"] := .F.
+        oResponse["data"] := {}
+        oResponse["message"] := "Erro na consulta: " + oError:Description
+        
+        self:setStatus(500)
+    endtry
+
+return oResponse
+
+/*/{Protheus.doc} GetLocais
+Endpoint para buscar locais de estoque
+@type method
+@author Guilherme Souza
+@since 2025
+@return object, JSON com lista de locais
+/*/
+@Get("/locais-estoque")
+method GetLocais() as object class ConsultaEstoqueAPI
+    local oResponse as object
+    local aLocais as array
+
+    try
+        aLocais := BuscarLocaisEstoque()
+        
+        oResponse := JsonObject():new()
+        oResponse["success"] := .T.
+        oResponse["data"] := aLocais
+        
+        self:setStatus(200)
+        
+    catch oError
+        oResponse := JsonObject():new()
+        oResponse["success"] := .F.
+        oResponse["data"] := {}
+        oResponse["message"] := "Erro ao buscar locais: " + oError:Description
+        
+        self:setStatus(500)
+    endtry
+
+return oResponse
+
+/*/{Protheus.doc} GetCategorias
+Endpoint para buscar categorias de produtos
+@type method
+@author Guilherme Souza
+@since 2025
+@return object, JSON com lista de categorias
+/*/
+@Get("/categorias-estoque")
+method GetCategorias() as object class ConsultaEstoqueAPI
+    local oResponse as object
+    local aCategorias as array
+
+    try
+        aCategorias := BuscarCategoriasEstoque()
+        
+        oResponse := JsonObject():new()
+        oResponse["success"] := .T.
+        oResponse["data"] := aCategorias
+        
+        self:setStatus(200)
+        
+    catch oError
+        oResponse := JsonObject():new()
+        oResponse["success"] := .F.
+        oResponse["data"] := {}
+        oResponse["message"] := "Erro ao buscar categorias: " + oError:Description
+        
+        self:setStatus(500)
+    endtry
+
+return oResponse
+
+/*/{Protheus.doc} GetProduto
+Endpoint para buscar produto específico por código
+@type method
+@author Guilherme Souza
+@since 2025
+@param codigo, character, Código do produto
+@return object, JSON com dados do produto
+/*/
+@Get("/produto-estoque/:codigo")
+method GetProduto(codigo as character) as object class ConsultaEstoqueAPI
+    local oResponse as object
+    local oProduto as object
+
+    try
+        oProduto := BuscarProdutoPorCodigo(codigo)
+        
+        if oProduto != nil
+            oResponse := JsonObject():new()
+            oResponse["success"] := .T.
+            oResponse["data"] := oProduto
+            self:setStatus(200)
+        else
+            oResponse := JsonObject():new()
+            oResponse["success"] := .F.
+            oResponse["data"] := {}
+            oResponse["message"] := "Produto não encontrado"
+            self:setStatus(404)
+        endif
+        
+    catch oError
+        oResponse := JsonObject():new()
+        oResponse["success"] := .F.
+        oResponse["data"] := {}
+        oResponse["message"] := "Erro ao buscar produto: " + oError:Description
+        
+        self:setStatus(500)
+    endtry
+
+return oResponse
+
+// ============================================================================
+// FUNÇÕES AUXILIARES
+// ============================================================================
+
+/*/{Protheus.doc} ConsultarEstoque
+Função para consultar estoque com filtros
+@type function
+@author Guilherme Souza
+@since 2025
+@param cCodProd, character, Código do produto
+@param cDescProd, character, Descrição do produto
+@param cCateg, character, Categoria
+@param cLoc, character, Local
+@param lComSaldo, logical, Somente com saldo
+@return array, Array com produtos encontrados
+/*/
+static function ConsultarEstoque(cCodProd, cDescProd, cCateg, cLoc, lComSaldo)
+    local aEstoque := {}
+    local cQuery := ""
+    local cAlias := GetNextAlias()
+    
+    // Monta a query principal
+    cQuery := "SELECT B1_COD, B1_DESC, B1_CATEG, B1_UM, "
+    cQuery += "       B2_LOCAL, B2_QATU, B2_QACLASS, B2_RESERVA, "
+    cQuery += "       B1_CUSTD, B1_PRV1, B1_UREV "
+    cQuery += "FROM " + RetSqlName("SB1") + " SB1 "
+    cQuery += "INNER JOIN " + RetSqlName("SB2") + " SB2 ON "
+    cQuery += "    B1_COD = B2_COD "
+    cQuery += "    AND SB1.D_E_L_E_T_ = ' ' "
+    cQuery += "    AND SB2.D_E_L_E_T_ = ' ' "
+    cQuery += "WHERE 1=1 "
+    
+    // Aplica filtros
+    if !Empty(cCodProd)
+        cQuery += "AND B1_COD LIKE '%" + AllTrim(cCodProd) + "%' "
+    endif
+    
+    if !Empty(cDescProd)
+        cQuery += "AND B1_DESC LIKE '%" + Upper(AllTrim(cDescProd)) + "%' "
+    endif
+    
+    if !Empty(cCateg)
+        cQuery += "AND B1_CATEG = '" + cCateg + "' "
+    endif
+    
+    if !Empty(cLoc)
+        cQuery += "AND B2_LOCAL = '" + cLoc + "' "
+    endif
+    
+    if lComSaldo
+        cQuery += "AND B2_QATU > 0 "
+    endif
+    
+    cQuery += "ORDER BY B1_COD, B2_LOCAL "
+    
+    // Executa a query
+    cQuery := ChangeQuery(cQuery)
+    dbUseArea(.T., "TOPCONN", TCGenQry(,,cQuery), cAlias, .F., .T.)
+    
+    // Processa resultados
+    while !(cAlias)->(EOF())
+        oProduto := JsonObject():new()
+        oProduto["codigo"] := AllTrim((cAlias)->B1_COD)
+        oProduto["descricao"] := AllTrim((cAlias)->B1_DESC)
+        oProduto["categoria"] := AllTrim((cAlias)->B1_CATEG)
+        oProduto["unidade"] := AllTrim((cAlias)->B1_UM)
+        oProduto["local"] := AllTrim((cAlias)->B2_LOCAL)
+        oProduto["saldoAtual"] := (cAlias)->B2_QATU
+        oProduto["saldoDisponivel"] := (cAlias)->B2_QACLASS
+        oProduto["saldoReservado"] := (cAlias)->B2_RESERVA
+        oProduto["custoMedio"] := (cAlias)->B1_CUSTD
+        oProduto["precoVenda"] := (cAlias)->B1_PRV1
+        oProduto["ultimaMovimentacao"] := StoD((cAlias)->B1_UREV)
+        oProduto["ativo"] := .T.
+        
+        aAdd(aEstoque, oProduto)
+        
+        (cAlias)->(dbSkip())
+    enddo
+    
+    (cAlias)->(dbCloseArea())
+
+return aEstoque
+
+/*/{Protheus.doc} BuscarLocaisEstoque
+Função para buscar locais de estoque
+@type function
+@author Guilherme Souza
+@since 2025
+@return array, Array com locais
+/*/
+static function BuscarLocaisEstoque()
+    local aLocais := {}
+    local cQuery := ""
+    local cAlias := GetNextAlias()
+    
+    cQuery := "SELECT DISTINCT B2_LOCAL "
+    cQuery += "FROM " + RetSqlName("SB2") + " "
+    cQuery += "WHERE D_E_L_E_T_ = ' ' "
+    cQuery += "ORDER BY B2_LOCAL "
+    
+    cQuery := ChangeQuery(cQuery)
+    dbUseArea(.T., "TOPCONN", TCGenQry(,,cQuery), cAlias, .F., .T.)
+    
+    while !(cAlias)->(EOF())
+        oLocal := JsonObject():new()
+        oLocal["codigo"] := AllTrim((cAlias)->B2_LOCAL)
+        oLocal["descricao"] := "Local " + AllTrim((cAlias)->B2_LOCAL)
+        
+        aAdd(aLocais, oLocal)
+        (cAlias)->(dbSkip())
+    enddo
+    
+    (cAlias)->(dbCloseArea())
+
+return aLocais
+
+/*/{Protheus.doc} BuscarCategoriasEstoque
+Função para buscar categorias de produtos
+@type function
+@author Guilherme Souza
+@since 2025
+@return array, Array com categorias
+/*/
+static function BuscarCategoriasEstoque()
+    local aCategorias := {}
+    local cQuery := ""
+    local cAlias := GetNextAlias()
+    
+    cQuery := "SELECT DISTINCT B1_CATEG "
+    cQuery += "FROM " + RetSqlName("SB1") + " "
+    cQuery += "WHERE D_E_L_E_T_ = ' ' "
+    cQuery += "AND B1_CATEG <> ' ' "
+    cQuery += "ORDER BY B1_CATEG "
+    
+    cQuery := ChangeQuery(cQuery)
+    dbUseArea(.T., "TOPCONN", TCGenQry(,,cQuery), cAlias, .F., .T.)
+    
+    while !(cAlias)->(EOF())
+        oCategoria := JsonObject():new()
+        oCategoria["codigo"] := AllTrim((cAlias)->B1_CATEG)
+        oCategoria["descricao"] := "Categoria " + AllTrim((cAlias)->B1_CATEG)
+        
+        aAdd(aCategorias, oCategoria)
+        (cAlias)->(dbSkip())
+    enddo
+    
+    (cAlias)->(dbCloseArea())
+
+return aCategorias
+
+/*/{Protheus.doc} BuscarProdutoPorCodigo
+Função para buscar produto específico por código
+@type function
+@author Guilherme Souza
+@since 2025
+@param cCodigo, character, Código do produto
+@return object, Objeto com dados do produto
+/*/
+static function BuscarProdutoPorCodigo(cCodigo)
+    local oProduto := nil
+    local aResult := {}
+    
+    aResult := ConsultarEstoque(cCodigo, "", "", "", .F.)
+    
+    if Len(aResult) > 0
+        oProduto := aResult[1]
+    endif
+
+return oProduto
