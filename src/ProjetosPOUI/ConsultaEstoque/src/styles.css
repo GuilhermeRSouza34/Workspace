@@ -1,0 +1,22 @@
+/* You can add global styles to this file, and also import other style files */
+@import url('https://cdn.jsdelivr.net/npm/@po-ui/style/css/po-theme-default.min.css');
+
+body {
+  margin: 0;
+  font-family: 'Roboto', sans-serif;
+}
+
+.container-estoque {
+  padding: 20px;
+}
+
+.filtros-container {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.resultado-container {
+  margin-top: 20px;
+}

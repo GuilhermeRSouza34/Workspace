@@ -1,0 +1,124 @@
+<po-page-default 
+  p-title="Consulta de Estoque"
+  [p-actions]="pageActions"
+  [p-loading]="loading">
+
+  <!-- Formulário de Filtros -->
+  <form [formGroup]="formFiltros" class="filtros-container">
+    <po-container>
+      <div class="po-row">
+        <po-input
+          class="po-md-3"
+          name="codigoProduto"
+          p-label="Código do Produto"
+          formControlName="codigoProduto"
+          p-placeholder="Ex: 001">
+        </po-input>
+
+        <po-input
+          class="po-md-6"
+          name="descricaoProduto"
+          p-label="Descrição do Produto"
+          formControlName="descricaoProduto"
+          p-placeholder="Digite parte da descrição">
+        </po-input>
+
+        <po-select
+          class="po-md-3"
+          name="categoria"
+          p-label="Categoria"
+          formControlName="categoria"
+          [p-options]="categorias"
+          p-placeholder="Selecione uma categoria">
+        </po-select>
+      </div>
+
+      <div class="po-row">
+        <po-select
+          class="po-md-3"
+          name="local"
+          p-label="Local de Estoque"
+          formControlName="local"
+          [p-options]="locais"
+          p-placeholder="Selecione um local">
+        </po-select>
+
+        <po-checkbox
+          class="po-md-3"
+          name="somenteComSaldo"
+          p-label="Somente produtos com saldo"
+          formControlName="somenteComSaldo">
+        </po-checkbox>
+      </div>
+    </po-container>
+  </form>
+
+  <!-- Tabela de Resultados -->
+  <div class="resultado-container">
+    <po-table
+      [p-columns]="columns"
+      [p-items]="produtos"
+      [p-loading]="loading"
+      p-selectable="false"
+      p-striped="true"
+      p-sort="true"
+      p-show-more-disabled="false"
+      (p-row-select)="onRowSelect($event)">
+
+      <!-- Template customizado para status -->
+      <ng-template p-table-row-template let-row let-rowIndex="rowIndex">
+        <po-table-row [p-row]="row" [p-columns]="columns">
+          <!-- Célula customizada para saldo com cor -->
+          <po-table-cell 
+            [ngClass]="{
+              'text-success': row.saldoAtual > 0,
+              'text-danger': row.saldoAtual <= 0
+            }">
+            {{ row.saldoAtual | number:'1.2-2' }}
+          </po-table-cell>
+        </po-table-row>
+      </ng-template>
+
+      <!-- Mensagem quando não há dados -->
+      <po-table-subtitle 
+        *ngIf="produtos.length === 0 && !loading"
+        p-subtitle="Nenhum produto encontrado. Use os filtros acima para realizar uma consulta.">
+      </po-table-subtitle>
+
+    </po-table>
+  </div>
+
+  <!-- Card com resumo -->
+  <po-widget
+    *ngIf="produtos.length > 0"
+    p-title="Resumo da Consulta"
+    class="po-mt-2">
+    <div class="po-row">
+      <div class="po-sm-3">
+        <po-info 
+          p-label="Total de Produtos"
+          [p-value]="produtos.length">
+        </po-info>
+      </div>
+      <div class="po-sm-3">
+        <po-info 
+          p-label="Com Saldo Positivo"
+          [p-value]="produtos.filter(p => p.saldoAtual > 0).length">
+        </po-info>
+      </div>
+      <div class="po-sm-3">
+        <po-info 
+          p-label="Sem Saldo"
+          [p-value]="produtos.filter(p => p.saldoAtual <= 0).length">
+        </po-info>
+      </div>
+      <div class="po-sm-3">
+        <po-info 
+          p-label="Valor Total do Estoque"
+          [p-value]="calcularValorTotal() | currency:'BRL':'symbol':'1.2-2'">
+        </po-info>
+      </div>
+    </div>
+  </po-widget>
+
+</po-page-default>
