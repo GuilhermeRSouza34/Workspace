@@ -1,0 +1,258 @@
+#include "TOTVS.CH"
+#include "RESTFUL.CH"
+
+//-------------------------------------------------------------------
+/*/{Protheus.doc} VendasDiariasAPI
+API REST para consulta de vendas diárias
+Desenvolvido com TLPP para integração com PO-UI
+
+@author  Guilherme Souza
+@since   24/07/2025
+@version 1.0
+/*/
+//-------------------------------------------------------------------
+
+@Get("/vendas-diarias")
+User Function GetVendasDiarias()
+    Local oResponse := JsonObject():New()
+    Local cPeriodo := ""
+    Local cMes := ""
+    Local cAno := ""
+    Local aDados := {}
+    
+    // Recebe parâmetros da query string
+    cMes := HttpGet->mes
+    cAno := HttpGet->ano
+    
+    // Validações
+    If Empty(cMes) .Or. Empty(cAno)
+        cMes := StrZero(Month(dDataBase), 2)
+        cAno := AllTrim(Str(Year(dDataBase)))
+    EndIf
+    
+    // Monta período
+    cPeriodo := cMes + "/" + cAno
+    
+    // Busca dados
+    aDados := BuscaVendasDiarias(cMes, cAno)
+    
+    // Monta resposta
+    oResponse["success"] := .T.
+    oResponse["message"] := "Dados obtidos com sucesso"
+    oResponse["periodo"] := cPeriodo
+    oResponse["data"] := aDados
+    oResponse["totalRegistros"] := Len(aDados)
+    
+    // Define cabeçalhos CORS
+    HttpPost->headers := JsonObject():New()
+    HttpPost->headers["Access-Control-Allow-Origin"] := "*"
+    HttpPost->headers["Access-Control-Allow-Methods"] := "GET, POST, PUT, DELETE, OPTIONS"
+    HttpPost->headers["Access-Control-Allow-Headers"] := "Content-Type, Authorization"
+    HttpPost->headers["Content-Type"] := "application/json"
+    
+    HttpSetResponse(oResponse:ToJson())
+Return
+
+//-------------------------------------------------------------------
+/*/{Protheus.doc} BuscaVendasDiarias
+Função para buscar dados de vendas diárias
+Baseada na query original do VENDDIA.prw
+
+@param cMes - Mês da consulta
+@param cAno - Ano da consulta
+@return aDados - Array com os dados das vendas diárias
+/*/
+//-------------------------------------------------------------------
+Static Function BuscaVendasDiarias(cMes, cAno)
+    Local cQuery := ""
+    Local aDados := {}
+    Local oItem := Nil
+    Local cAlias := GetNextAlias()
+    
+    // Query principal baseada no VENDDIA.prw original
+    cQuery := "SELECT DIA, "
+    cQuery += "QTDE_VENDIDA = SUM(QTDE_VENDIDA), VLR_VENDIDO = SUM(VLR_VENDIDO), "
+    cQuery += "QTDREM = SUM(QTDREM), VLRREM = SUM(VLRREM), "
+    cQuery += "QTDFATTD = SUM(QTDFATTD), VLRFATTD = SUM(VLRFATTD), "
+    cQuery += "QTDDEV = SUM(QTDDEV), VLRDEV = SUM(VLRDEV), "
+    cQuery += "QTDDEVREM = SUM(QTDDEVREM), VLRDEVREM = SUM(VLRDEVREM), "
+    cQuery += "QTDDEVFTD = SUM(QTDDEVFTD), VLRDEVFTD = SUM(VLRDEVFTD), "
+    cQuery += "QTDETRANSF = SUM(QTDETRANSF), VLRTRANSF = SUM(VLRTRANSF) "
+    cQuery += "FROM ( "
+    
+    // Union das consultas (vendas, remessa, fatura tudo, devoluções, transferências)
+    cQuery += GetQueryVendas(cMes, cAno) + " UNION "
+    cQuery += GetQueryRemessa(cMes, cAno) + " UNION "
+    cQuery += GetQueryFaturaTudo(cMes, cAno) + " UNION "
+    cQuery += GetQueryDevolucoes(cMes, cAno) + " UNION "
+    cQuery += GetQueryDevolucaoRemessa(cMes, cAno) + " UNION "
+    cQuery += GetQueryDevolucaoFaturaTudo(cMes, cAno) + " UNION "
+    cQuery += GetQueryTransferencia(cMes, cAno) + " UNION "
+    cQuery += GetQueryDevolucaoTransferencia(cMes, cAno)
+    
+    cQuery += ") AS FAT "
+    cQuery += "GROUP BY DIA "
+    cQuery += "ORDER BY DIA "
+    
+    // Executa query
+    cQuery := ChangeQuery(cQuery)
+    
+    DbUseArea(.T., "TOPCONN", TCGenQry(,, cQuery), cAlias, .F., .T.)
+    
+    // Configura campos
+    TCSetField(cAlias, "QTDE_VENDIDA", "N", 12, 2)
+    TCSetField(cAlias, "VLR_VENDIDO", "N", 12, 2)
+    TCSetField(cAlias, "QTDREM", "N", 12, 2)
+    TCSetField(cAlias, "VLRREM", "N", 12, 2)
+    TCSetField(cAlias, "QTDFATTD", "N", 12, 2)
+    TCSetField(cAlias, "VLRFATTD", "N", 12, 2)
+    TCSetField(cAlias, "QTDDEV", "N", 12, 2)
+    TCSetField(cAlias, "VLRDEV", "N", 12, 2)
+    TCSetField(cAlias, "QTDDEVREM", "N", 12, 2)
+    TCSetField(cAlias, "VLRDEVREM", "N", 12, 2)
+    TCSetField(cAlias, "QTDDEVFTD", "N", 12, 2)
+    TCSetField(cAlias, "VLRDEVFTD", "N", 12, 2)
+    TCSetField(cAlias, "QTDETRANSF", "N", 12, 2)
+    TCSetField(cAlias, "VLRTRANSF", "N", 12, 2)
+    
+    // Processa resultados
+    (cAlias)->(DbGoTop())
+    While !(cAlias)->(Eof())
+        oItem := JsonObject():New()
+        
+        oItem["dia"] := (cAlias)->DIA
+        oItem["qtdeVendida"] := (cAlias)->QTDE_VENDIDA
+        oItem["vlrVendido"] := (cAlias)->VLR_VENDIDO
+        oItem["qtdeRemessa"] := (cAlias)->QTDREM
+        oItem["vlrRemessa"] := (cAlias)->VLRREM
+        oItem["qtdeFaturaTudo"] := (cAlias)->QTDFATTD
+        oItem["vlrFaturaTudo"] := (cAlias)->VLRFATTD
+        oItem["qtdeDevolucao"] := (cAlias)->QTDDEV
+        oItem["vlrDevolucao"] := (cAlias)->VLRDEV
+        oItem["qtdeDevRemessa"] := (cAlias)->QTDDEVREM
+        oItem["vlrDevRemessa"] := (cAlias)->VLRDEVREM
+        oItem["qtdeDevFaturaTudo"] := (cAlias)->QTDDEVFTD
+        oItem["vlrDevFaturaTudo"] := (cAlias)->VLRDEVFTD
+        oItem["qtdeTransferencia"] := (cAlias)->QTDETRANSF
+        oItem["vlrTransferencia"] := (cAlias)->VLRTRANSF
+        
+        // Campos calculados
+        oItem["totalEntregueQtd"] := ((cAlias)->QTDE_VENDIDA + (cAlias)->QTDETRANSF + (cAlias)->QTDREM) - (cAlias)->QTDDEV - (cAlias)->QTDDEVREM
+        oItem["totalEntregueVlr"] := ((cAlias)->VLR_VENDIDO + (cAlias)->VLRREM) - (cAlias)->VLRDEV - (cAlias)->VLRDEVREM
+        oItem["totalVendidoQtd"] := ((cAlias)->QTDE_VENDIDA + (cAlias)->QTDFATTD) - (cAlias)->QTDDEV - (cAlias)->QTDDEVFTD
+        oItem["totalVendidoVlr"] := ((cAlias)->VLR_VENDIDO + (cAlias)->VLRFATTD) - (cAlias)->VLRDEV - (cAlias)->VLRDEVFTD
+        
+        AAdd(aDados, oItem)
+        
+        (cAlias)->(DbSkip())
+    EndDo
+    
+    (cAlias)->(DbCloseArea())
+    
+Return aDados
+
+//-------------------------------------------------------------------
+// Funções auxiliares para montar as queries (baseadas no original)
+//-------------------------------------------------------------------
+
+Static Function GetQueryVendas(cMes, cAno)
+    Local cQuery := ""
+    
+    cQuery := "SELECT DAY(SC5.C5_EMISSAO) AS DIA, "
+    cQuery += "SUM(CASE WHEN SB1.B1_TIPO = 'PA' THEN (SC6.C6_QTDVEN * SB1.B1_PESO) ELSE 0 END) AS QTDE_VENDIDA, "
+    cQuery += "SUM(SC6.C6_VALOR) AS VLR_VENDIDO, "
+    cQuery += "0 AS QTDREM, 0 AS VLRREM, 0 AS QTDFATTD, 0 AS VLRFATTD, "
+    cQuery += "0 AS QTDDEV, 0 AS VLRDEV, 0 AS QTDDEVREM, 0 AS VLRDEVREM, "
+    cQuery += "0 AS QTDDEVFTD, 0 AS VLRDEVFTD, 0 AS QTDETRANSF, 0 AS VLRTRANSF "
+    cQuery += "FROM " + RetSqlName("SC5") + " SC5 "
+    cQuery += "INNER JOIN " + RetSqlName("SC6") + " SC6 ON SC5.C5_NUM = SC6.C6_NUM AND SC5.C5_FILIAL = SC6.C6_FILIAL "
+    cQuery += "INNER JOIN " + RetSqlName("SF4") + " SF4 ON SC6.C6_TES = SF4.F4_CODIGO "
+    cQuery += "INNER JOIN " + RetSqlName("SA1") + " SA1 ON SC5.C5_CLIENTE = SA1.A1_COD AND SC5.C5_LOJACLI = SA1.A1_LOJA "
+    cQuery += "INNER JOIN " + RetSqlName("SB1") + " SB1 ON SC6.C6_PRODUTO = SB1.B1_COD "
+    cQuery += "WHERE MONTH(SC5.C5_EMISSAO) = '" + cMes + "' "
+    cQuery += "AND YEAR(SC5.C5_EMISSAO) = '" + cAno + "' "
+    cQuery += "AND SC5.C5_TIPOSAI NOT IN ('S','D') "
+    cQuery += "AND SC5.C5_TIPO NOT IN ('B', 'D','P','I') "
+    cQuery += "AND SF4.F4_ESTOQUE = 'S' "
+    cQuery += "AND SB1.B1_TIPO IN ('PA', 'PR') "
+    cQuery += "AND SC5.C5_CLIENTE NOT IN ('314844','319030','091773','180268','091542','321807','090003','305774','090004','300948','319222','010981','383587') "
+    cQuery += "AND SC5.C5_FILIAL = '" + xFilial("SC5") + "' "
+    cQuery += "AND SC6.C6_FILIAL = '" + xFilial("SC6") + "' "
+    cQuery += "AND SF4.F4_FILIAL = '" + xFilial("SF4") + "' "
+    cQuery += "AND SB1.B1_FILIAL = '" + xFilial("SB1") + "' "
+    cQuery += "AND SA1.A1_FILIAL = '" + xFilial("SA1") + "' "
+    cQuery += "AND SC5.D_E_L_E_T_ = '' AND SA1.D_E_L_E_T_ = '' AND SC6.D_E_L_E_T_ = '' AND SF4.D_E_L_E_T_ = '' AND SB1.D_E_L_E_T_ = '' "
+    cQuery += "GROUP BY DAY(SC5.C5_EMISSAO) "
+    
+Return cQuery
+
+// [Implementar outras funções GetQuery... seguindo o mesmo padrão]
+Static Function GetQueryRemessa(cMes, cAno)
+    // Implementação similar à query de remessa do arquivo original
+Return ""
+
+Static Function GetQueryFaturaTudo(cMes, cAno) 
+    // Implementação similar à query de fatura tudo do arquivo original
+Return ""
+
+Static Function GetQueryDevolucoes(cMes, cAno)
+    // Implementação similar à query de devoluções do arquivo original
+Return ""
+
+Static Function GetQueryDevolucaoRemessa(cMes, cAno)
+    // Implementação similar à query de devolução remessa do arquivo original
+Return ""
+
+Static Function GetQueryDevolucaoFaturaTudo(cMes, cAno)
+    // Implementação similar à query de devolução fatura tudo do arquivo original
+Return ""
+
+Static Function GetQueryTransferencia(cMes, cAno)
+    // Implementação similar à query de transferência do arquivo original
+Return ""
+
+Static Function GetQueryDevolucaoTransferencia(cMes, cAno)
+    // Implementação similar à query de devolução transferência do arquivo original
+Return ""
+
+//-------------------------------------------------------------------
+/*/{Protheus.doc} GetTotalizadores
+Endpoint para buscar totalizadores do período
+
+@return Json com totalizadores
+/*/
+//-------------------------------------------------------------------
+@Get("/vendas-diarias/totalizadores")
+User Function GetTotalizadores()
+    Local oResponse := JsonObject():New()
+    Local cMes := HttpGet->mes
+    Local cAno := HttpGet->ano
+    Local oTotais := JsonObject():New()
+    
+    If Empty(cMes) .Or. Empty(cAno)
+        cMes := StrZero(Month(dDataBase), 2)
+        cAno := AllTrim(Str(Year(dDataBase)))
+    EndIf
+    
+    // Busca totalizadores
+    oTotais := BuscaTotalizadores(cMes, cAno)
+    
+    oResponse["success"] := .T.
+    oResponse["message"] := "Totalizadores obtidos com sucesso"
+    oResponse["periodo"] := cMes + "/" + cAno
+    oResponse["totalizadores"] := oTotais
+    
+    HttpSetResponse(oResponse:ToJson())
+Return
+
+Static Function BuscaTotalizadores(cMes, cAno)
+    Local oTotais := JsonObject():New()
+    // Implementar lógica de totalização baseada no original
+    
+    oTotais["totalVendasQtd"] := 0
+    oTotais["totalVendasVlr"] := 0
+    oTotais["totalTransfQtd"] := 0
+    oTotais["totalDevolQtd"] := 0
+    oTotais["totalDevolVlr"] := 0
+    
+Return oTotais
