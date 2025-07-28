@@ -1,0 +1,241 @@
+<po-page-default p-title="Relatório de Correção de Cor">
+  
+  <!-- Cabeçalho com filtros -->
+  <div class="po-row">
+    <po-widget class="po-md-12 filter-section">
+      <div class="po-row">
+        
+        <po-datepicker
+          class="po-md-3"
+          name="dtIni"
+          [(ngModel)]="filtros.dtIni"
+          p-label="Data Inicial"
+          p-required="true"
+          (p-change)="onFiltroChange()">
+        </po-datepicker>
+
+        <po-datepicker
+          class="po-md-3"
+          name="dtFim"
+          [(ngModel)]="filtros.dtFim"
+          p-label="Data Final"
+          p-required="true"
+          (p-change)="onFiltroChange()">
+        </po-datepicker>
+
+        <po-select
+          class="po-md-3"
+          name="filial"
+          [(ngModel)]="filtros.filial"
+          p-label="Filial"
+          [p-options]="filialOptions"
+          (p-change)="onFiltroChange()">
+        </po-select>
+
+        <po-select
+          class="po-md-3"
+          name="tpRel"
+          [(ngModel)]="filtros.tpRel"
+          p-label="Tipo Relatório"
+          [p-options]="tipoRelatorioOptions"
+          (p-change)="onFiltroChange()">
+        </po-select>
+        
+      </div>
+
+      <div class="po-row">
+        <div class="po-md-12 action-buttons">
+          <po-button
+            p-label="Limpar Filtros"
+            p-kind="secondary"
+            p-icon="po-icon-refresh"
+            (p-click)="limparFiltros()">
+          </po-button>
+          
+          <po-button
+            p-label="Exportar Excel"
+            p-kind="primary"
+            p-icon="po-icon-export"
+            (p-click)="exportarExcel()">
+          </po-button>
+        </div>
+      </div>
+      
+    </po-widget>
+  </div>
+
+  <!-- Dashboard Cards -->
+  <div class="po-row dashboard-cards">
+    <po-widget class="po-md-3">
+      <div class="card-content">
+        <div class="card-number">{{ dashboardData.totalLiberacoes || 0 }}</div>
+        <div class="card-label">Total Liberações</div>
+      </div>
+    </po-widget>
+    
+    <po-widget class="po-md-3">
+      <div class="card-content">
+        <div class="card-number">{{ dashboardData.totalCorrecoes || 0 }}</div>
+        <div class="card-label">Total Correções</div>
+      </div>
+    </po-widget>
+    
+    <po-widget class="po-md-3">
+      <div class="card-content">
+        <div class="card-number">{{ dashboardData.aprovadas || 0 }}</div>
+        <div class="card-label">Aprovadas</div>
+      </div>
+    </po-widget>
+    
+    <po-widget class="po-md-3">
+      <div class="card-content">
+        <div class="card-number">{{ dashboardData.reprovadas || 0 }}</div>
+        <div class="card-label">Reprovadas</div>
+      </div>
+    </po-widget>
+  </div>
+
+  <!-- Abas do relatório -->
+  <po-tabs>
+    
+    <!-- Aba 1: Todas as Liberações -->
+    <po-tab p-label="Todas Liberações" (p-active)="onAbaChange(1)">
+      <po-loading-overlay [p-screen-lock]="loading">
+        <po-table
+          [p-columns]="colunasLiberacoes"
+          [p-items]="todasLiberacoes"
+          [p-loading]="loading"
+          p-striped="true"
+          p-sort="true"
+          p-show-more-disabled="false"
+          p-height="400">
+          
+          <ng-container *poTableNoData>
+            <div class="no-data-message">
+              <po-icon p-icon="po-icon-info"></po-icon>
+              <p>Nenhuma liberação encontrada para o período selecionado.</p>
+            </div>
+          </ng-container>
+          
+        </po-table>
+      </po-loading-overlay>
+    </po-tab>
+
+    <!-- Aba 2: Todas as Correções -->
+    <po-tab p-label="Todas Correções" (p-active)="onAbaChange(2)">
+      <po-loading-overlay [p-screen-lock]="loading">
+        <po-table
+          [p-columns]="colunasCorrecoes"
+          [p-items]="todasCorrecoes"
+          [p-loading]="loading"
+          p-striped="true"
+          p-sort="true"
+          p-show-more-disabled="false"
+          p-height="400">
+          
+          <ng-container *poTableNoData>
+            <div class="no-data-message">
+              <po-icon p-icon="po-icon-info"></po-icon>
+              <p>Nenhuma correção encontrada para o período selecionado.</p>
+            </div>
+          </ng-container>
+          
+        </po-table>
+      </po-loading-overlay>
+    </po-tab>
+
+    <!-- Aba 3: Liberações sem TO -->
+    <po-tab p-label="Liberações sem TO" (p-active)="onAbaChange(3)">
+      <po-loading-overlay [p-screen-lock]="loading">
+        <po-table
+          [p-columns]="colunasLiberacoes"
+          [p-items]="liberacoesSemTO"
+          [p-loading]="loading"
+          p-striped="true"
+          p-sort="true"
+          p-show-more-disabled="false"
+          p-height="400">
+          
+          <ng-container *poTableNoData>
+            <div class="no-data-message">
+              <po-icon p-icon="po-icon-info"></po-icon>
+              <p>Nenhuma liberação sem TO encontrada.</p>
+            </div>
+          </ng-container>
+          
+        </po-table>
+      </po-loading-overlay>
+    </po-tab>
+
+    <!-- Aba 4: Liberações com TO -->
+    <po-tab p-label="Liberações com TO" (p-active)="onAbaChange(4)">
+      <po-loading-overlay [p-screen-lock]="loading">
+        <po-table
+          [p-columns]="colunasLiberacoes"
+          [p-items]="liberacoesComTO"
+          [p-loading]="loading"
+          p-striped="true"
+          p-sort="true"
+          p-show-more-disabled="false"
+          p-height="400">
+          
+          <ng-container *poTableNoData>
+            <div class="no-data-message">
+              <po-icon p-icon="po-icon-info"></po-icon>
+              <p>Nenhuma liberação com TO encontrada.</p>
+            </div>
+          </ng-container>
+          
+        </po-table>
+      </po-loading-overlay>
+    </po-tab>
+
+    <!-- Aba 5: Correções sem TO -->
+    <po-tab p-label="Correções sem TO" (p-active)="onAbaChange(5)">
+      <po-loading-overlay [p-screen-lock]="loading">
+        <po-table
+          [p-columns]="colunasCorrecoes"
+          [p-items]="correcoesSemTO"
+          [p-loading]="loading"
+          p-striped="true"
+          p-sort="true"
+          p-show-more-disabled="false"
+          p-height="400">
+          
+          <ng-container *poTableNoData>
+            <div class="no-data-message">
+              <po-icon p-icon="po-icon-info"></po-icon>
+              <p>Nenhuma correção sem TO encontrada.</p>
+            </div>
+          </ng-container>
+          
+        </po-table>
+      </po-loading-overlay>
+    </po-tab>
+
+    <!-- Aba 6: Correções com TO -->
+    <po-tab p-label="Correções com TO" (p-active)="onAbaChange(6)">
+      <po-loading-overlay [p-screen-lock]="loading">
+        <po-table
+          [p-columns]="colunasCorrecoes"
+          [p-items]="correcoesComTO"
+          [p-loading]="loading"
+          p-striped="true"
+          p-sort="true"
+          p-show-more-disabled="false"
+          p-height="400">
+          
+          <ng-container *poTableNoData>
+            <div class="no-data-message">
+              <po-icon p-icon="po-icon-info"></po-icon>
+              <p>Nenhuma correção com TO encontrada.</p>
+            </div>
+          </ng-container>
+          
+        </po-table>
+      </po-loading-overlay>
+    </po-tab>
+
+  </po-tabs>
+
+</po-page-default>

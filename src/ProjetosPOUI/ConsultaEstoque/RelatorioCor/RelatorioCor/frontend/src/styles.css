@@ -1,0 +1,31 @@
+/* Estilos globais da aplicação */
+@import '~@po-ui/ng-components/css/po-theme-default.min.css';
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Customizações específicas do PO UI */
+.po-container {
+  padding: 20px;
+}
+
+.po-widget {
+  margin-bottom: 15px;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+  .po-container {
+    padding: 10px;
+  }
+  
+  .po-widget {
+    margin-bottom: 10px;
+  }
+}

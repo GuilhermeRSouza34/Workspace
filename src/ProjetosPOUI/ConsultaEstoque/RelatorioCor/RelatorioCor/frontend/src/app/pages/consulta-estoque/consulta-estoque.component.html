@@ -1,0 +1,181 @@
+<po-page-default p-title="Consulta de Estoque - Correção de Cor" [p-actions]="acoesPagina" [p-loading]="loading">
+  
+  <!-- ========================================= -->
+  <!-- FILTROS RÁPIDOS -->
+  <!-- ========================================= -->
+  <po-container>
+    <div class="po-row">
+      <po-input 
+        class="po-md-4"
+        p-label="Data Inicial"
+        p-mask="99/99/9999"
+        [(ngModel)]="filtros.dataIni">
+      </po-input>
+      
+      <po-input 
+        class="po-md-4"
+        p-label="Data Final"
+        p-mask="99/99/9999"
+        [(ngModel)]="filtros.dataFim">
+      </po-input>
+      
+      <div class="po-md-4" style="padding-top: 20px;">
+        <po-button 
+          p-label="Aplicar Filtros"
+          p-kind="primary"
+          (p-click)="aplicarFiltros()">
+        </po-button>
+      </div>
+    </div>
+  </po-container>
+
+  <po-divider></po-divider>
+
+  <!-- ========================================= -->
+  <!-- NAVEGAÇÃO POR ABAS -->
+  <!-- ========================================= -->
+  <po-tabs>
+    
+    <!-- ABA: DASHBOARD -->
+    <po-tab p-label="Dashboard" p-active="true">
+      <po-container>
+        
+        <!-- Cards de KPIs -->
+        <div class="po-row">
+          
+          <!-- Total de Liberações -->
+          <po-widget 
+            class="po-md-3"
+            p-title="Total de Liberações"
+            [p-value]="dashboardData.totalLib"
+            p-primary-color="#2F4F4F">
+          </po-widget>
+          
+          <!-- Total de Correções -->
+          <po-widget 
+            class="po-md-3"
+            p-title="Total de Correções"
+            [p-value]="dashboardData.totalCor"
+            p-primary-color="#4682B4">
+          </po-widget>
+          
+          <!-- Aprovados -->
+          <po-widget 
+            class="po-md-3"
+            p-title="Aprovados"
+            [p-value]="dashboardData.aprovados"
+            p-primary-color="#228B22">
+          </po-widget>
+          
+          <!-- % Aprovação -->
+          <po-widget 
+            class="po-md-3"
+            p-title="% Aprovação"
+            [p-value]="dashboardData.percAprov + '%'"
+            p-primary-color="#32CD32">
+          </po-widget>
+          
+        </div>
+
+        <div class="po-row">
+          
+          <!-- Reprovados -->
+          <po-widget 
+            class="po-md-3"
+            p-title="Reprovados"
+            [p-value]="dashboardData.reprovados"
+            p-primary-color="#DC143C">
+          </po-widget>
+          
+          <!-- Média Correção/OP -->
+          <po-widget 
+            class="po-md-3"
+            p-title="Média Correção/OP"
+            [p-value]="dashboardData.mediaCorrOP"
+            p-primary-color="#FF8C00">
+          </po-widget>
+          
+          <!-- Técnico Mais Ativo -->
+          <po-widget 
+            class="po-md-3"
+            p-title="Técnico Mais Ativo"
+            [p-value]="dashboardData.tecAtivo"
+            p-primary-color="#9370DB">
+          </po-widget>
+          
+          <!-- Pigmento Mais Usado -->
+          <po-widget 
+            class="po-md-3"
+            p-title="Pigmento Mais Usado"
+            [p-value]="dashboardData.pigMais"
+            p-primary-color="#20B2AA">
+          </po-widget>
+          
+        </div>
+        
+      </po-container>
+    </po-tab>
+
+    <!-- ABA: LIBERAÇÕES -->
+    <po-tab p-label="Liberações (ZZS)">
+      <po-container>
+        
+        <po-table 
+          [p-columns]="colunasLiberacoes"
+          [p-items]="liberacoes"
+          p-striped="true"
+          p-sort="true"
+          p-show-more-disabled="false"
+          [p-loading]="loading">
+        </po-table>
+        
+      </po-container>
+    </po-tab>
+
+    <!-- ABA: CORREÇÕES -->
+    <po-tab p-label="Correções (ZZT)">
+      <po-container>
+        
+        <po-table 
+          [p-columns]="colunasCorrecoes"
+          [p-items]="correcoes"
+          p-striped="true"
+          p-sort="true"
+          p-show-more-disabled="false"
+          [p-loading]="loading">
+        </po-table>
+        
+      </po-container>
+    </po-tab>
+
+    <!-- ABA: LIBERAÇÕES SEM TO -->
+    <po-tab p-label="Lib. sem TO">
+      <po-container>
+        <po-info p-label="Em desenvolvimento" p-value="Filtrar liberações sem TO"></po-info>
+      </po-container>
+    </po-tab>
+
+    <!-- ABA: LIBERAÇÕES COM TO -->
+    <po-tab p-label="Lib. com TO">
+      <po-container>
+        <po-info p-label="Em desenvolvimento" p-value="Filtrar liberações com TO"></po-info>
+      </po-container>
+    </po-tab>
+
+    <!-- ABA: CORREÇÕES SEM TO -->
+    <po-tab p-label="Cor. sem TO">
+      <po-container>
+        <po-info p-label="Em desenvolvimento" p-value="Filtrar correções sem TO"></po-info>
+      </po-container>
+    </po-tab>
+
+    <!-- ABA: CORREÇÕES COM TO -->
+    <po-tab p-label="Cor. com TO">
+      <po-container>
+        <po-info p-label="Em desenvolvimento" p-value="Filtrar correções com TO"></po-info>
+      </po-container>
+    </po-tab>
+
+  </po-tabs>
+
+</po-page-default>

@@ -1,0 +1,139 @@
+/* Estilos para o componente Relatório de Correção de Cor */
+
+.filter-section {
+  margin-bottom: 16px;
+  padding: 16px;
+  background-color: #fafafa;
+  border-radius: 4px;
+}
+
+.action-buttons {
+  text-align: right;
+  margin-top: 16px;
+}
+
+.action-buttons po-button {
+  margin-left: 8px;
+}
+
+/* Dashboard Cards */
+.dashboard-cards {
+  margin-bottom: 20px;
+}
+
+.card-content {
+  text-align: center;
+  padding: 20px;
+}
+
+.card-number {
+  font-size: 32px;
+  font-weight: bold;
+  color: #0079bf;
+  margin-bottom: 8px;
+}
+
+.card-label {
+  font-size: 14px;
+  color: #666;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+/* Customização das tabelas */
+po-table {
+  margin-top: 16px;
+}
+
+.no-data-message {
+  text-align: center;
+  padding: 40px 20px;
+  color: #999;
+}
+
+.no-data-message po-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  color: #ccc;
+}
+
+.no-data-message p {
+  font-size: 16px;
+  margin: 0;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+  .filter-section .po-md-3 {
+    margin-bottom: 12px;
+  }
+  
+  .action-buttons {
+    text-align: center;
+  }
+  
+  .card-number {
+    font-size: 24px;
+  }
+  
+  .dashboard-cards .po-md-3 {
+    margin-bottom: 12px;
+  }
+}
+
+/* Customização das abas */
+po-tabs {
+  margin-top: 20px;
+}
+
+po-tab {
+  min-height: 500px;
+}
+
+/* Loading overlay */
+po-loading-overlay {
+  min-height: 400px;
+}
+
+/* Hover effects nos cards */
+po-widget:hover .card-content {
+  background-color: #f0f8ff;
+  transition: background-color 0.3s ease;
+}
+
+/* Estilos para campos de filtro */
+po-datepicker,
+po-select {
+  margin-bottom: 8px;
+}
+
+/* Customização específica para as colunas das tabelas */
+.po-table-column-number {
+  text-align: right;
+}
+
+.po-table-column-date {
+  text-align: center;
+}
+
+/* Melhorias visuais para o cabeçalho */
+po-page-default {
+  --po-page-header-background-color: #0079bf;
+  --po-page-header-color: white;
+}
+
+/* Destaque para resultados aprovados/reprovados */
+.resultado-aprovado {
+  color: #28a745;
+  font-weight: bold;
+}
+
+.resultado-reprovado {
+  color: #dc3545;
+  font-weight: bold;
+}
+
+.resultado-pendente {
+  color: #ffc107;
+  font-weight: bold;
+}
