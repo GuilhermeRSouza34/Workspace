@@ -18,7 +18,8 @@
 **/out-tsc/
 **/bazel-out/
 **/.angular/
-**/.angular/cache
+**/.angular/cache/
+**/.angular/**
 
 # Build artifacts
 **/*.tgz
