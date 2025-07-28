@@ -1,0 +1,227 @@
+// RelatorioCor.tlpp
+// Relatório de médias de pigmento por técnico
+
+@Rest
+class RelatorioCor {
+    @Get("/relatorio-cor")
+    action relatorioCor(
+        dataDe: string,
+        dataAte: string,
+        completo: bool
+    ) {
+        // ABA 1: Todas Liberações
+        var queryLib = "SELECT ZZS_FILIAL, ZZS_NUMLIB, ZZS_NUMOP, ZZS_PRODUT, ZZS_CORIBR, ZZS_COMPMO, ZZS_TCORRE, ZZS_OBSERV, " +
+            "ZZS_LOTE, ZZS_QUANT, ZZS_DATAI, ZZS_HORAI, ZZS_HORAF, ZZS_TONALI, ZZS_RESULT, ZZS_USLIBF, ZZS_MAQUIN " +
+            "FROM ZZS " +
+            "WHERE D_E_L_E_T_ = '' AND ZZS_RESULT <> 'S' " +
+            "AND ZZS_DATAI >= '" + dataDe + "' " +
+            "AND ZZS_DATAI <= '" + dataAte + "' " +
+            "ORDER BY ZZS_NUMLIB";
+
+        var todasLiberacoes = [];
+        var libStats = calcLiberacoes(QuerySql(queryLib));
+        todasLiberacoes = libStats.liberacoes;
+
+        // ABA 2: Todas Correções
+        var queryCorr = "SELECT ZZT.ZZT_FILIAL, ZZT.ZZT_NUMLIB, ZZT.ZZT_NUMANA, ZZT.ZZT_CODPIG, ZZT.ZZT_QUANTP, ZZT.ZZT_DATAI, ZZT.ZZT_HORAI, ZZT.ZZT_HORAF, ZZT.ZZT_NOMTC, ZZS.ZZS_TONALI, ZZS.ZZS_COMPMO " +
+            "FROM ZZT INNER JOIN ZZS ON ZZT.ZZT_FILIAL = ZZS.ZZS_FILIAL AND ZZT.ZZT_NUMLIB = ZZS.ZZS_NUMLIB " +
+            "WHERE ZZT.D_E_L_E_T_ = '' AND ZZS.D_E_L_E_T_ = '' AND ZZS.ZZS_RESULT <> 'S' " +
+            "AND ZZT.ZZT_DATAI >= '" + dataDe + "' " +
+            "AND ZZT.ZZT_DATAI <= '" + dataAte + "' " +
+            "ORDER BY ZZT.ZZT_NUMLIB, ZZT.ZZT_NUMANA";
+
+        var todasCorrecoes = [];
+        var corrStats = calcCorrecoes(QuerySql(queryCorr));
+        todasCorrecoes = corrStats.correcoes;
+
+        // ABA 3: Liberacoes Sem TO
+        var queryLibSemTO = "SELECT ZZS_FILIAL, ZZS_NUMLIB, ZZS_NUMOP, ZZS_PRODUT, ZZS_CORIBR, ZZS_COMPMO, ZZS_TCORRE, ZZS_OBSERV, " +
+            "ZZS_LOTE, ZZS_QUANT, ZZS_DATAI, ZZS_HORAI, ZZS_HORAF, ZZS_TONALI, ZZS_RESULT, ZZS_USLIBF, ZZS_MAQUIN " +
+            "FROM ZZS " +
+            "WHERE D_E_L_E_T_ = '' AND ZZS_RESULT <> 'S' AND LTRIM(RTRIM(ZZS_COMPMO)) = '' " +
+            "AND ZZS_DATAI >= '" + dataDe + "' " +
+            "AND ZZS_DATAI <= '" + dataAte + "' " +
+            "ORDER BY ZZS_NUMLIB";
+        var liberacoesSemTO = [];
+        for row in QuerySql(queryLibSemTO) {
+            liberacoesSemTO.push(row);
+        }
+
+        // ABA 4: Liberacoes TO
+        var queryLibTO = "SELECT ZZS_FILIAL, ZZS_NUMLIB, ZZS_NUMOP, ZZS_PRODUT, ZZS_CORIBR, ZZS_COMPMO, ZZS_TCORRE, ZZS_OBSERV, " +
+            "ZZS_LOTE, ZZS_QUANT, ZZS_DATAI, ZZS_HORAI, ZZS_HORAF, ZZS_TONALI, ZZS_RESULT, ZZS_USLIBF, ZZS_MAQUIN " +
+            "FROM ZZS " +
+            "WHERE D_E_L_E_T_ = '' AND ZZS_RESULT <> 'S' AND LTRIM(RTRIM(ZZS_COMPMO)) <> '' " +
+            "AND ZZS_DATAI >= '" + dataDe + "' " +
+            "AND ZZS_DATAI <= '" + dataAte + "' " +
+            "ORDER BY ZZS_NUMLIB";
+        var liberacoesTO = [];
+        for row in QuerySql(queryLibTO) {
+            liberacoesTO.push(row);
+        }
+
+        // ABA 5: Correcoes Sem TO
+        var queryCorrSemTO = "SELECT ZZT.ZZT_FILIAL, ZZT.ZZT_NUMLIB, ZZT.ZZT_NUMANA, ZZT.ZZT_CODPIG, ZZT.ZZT_QUANTP, ZZT.ZZT_DATAI, ZZT.ZZT_HORAI, ZZT.ZZT_HORAF, ZZT.ZZT_NOMTC, ZZS.ZZS_TONALI, ZZS.ZZS_COMPMO " +
+            "FROM ZZT INNER JOIN ZZS ON ZZT.ZZT_FILIAL = ZZS.ZZS_FILIAL AND ZZT.ZZT_NUMLIB = ZZS.ZZS_NUMLIB " +
+            "WHERE ZZT.D_E_L_E_T_ = '' AND ZZS.D_E_L_E_T_ = '' AND ZZS.ZZS_RESULT <> 'S' AND ZZS_COMPMO = '' " +
+            "AND ZZT.ZZT_DATAI >= '" + dataDe + "' " +
+            "AND ZZT.ZZT_DATAI <= '" + dataAte + "' " +
+            "ORDER BY ZZT.ZZT_NUMLIB, ZZT.ZZT_NUMANA";
+        var correcoesSemTO = [];
+        for row in QuerySql(queryCorrSemTO) {
+            correcoesSemTO.push(row);
+        }
+
+        // ABA 6: Correcoes TO
+        var queryCorrTO = "SELECT ZZT.ZZT_FILIAL, ZZT.ZZT_NUMLIB, ZZT.ZZT_NUMANA, ZZT.ZZT_CODPIG, ZZT.ZZT_QUANTP, ZZT.ZZT_DATAI, ZZT.ZZT_HORAI, ZZT.ZZT_HORAF, ZZT.ZZT_NOMTC, ZZS.ZZS_TONALI, ZZS.ZZS_COMPMO " +
+            "FROM ZZT INNER JOIN ZZS ON ZZT.ZZT_FILIAL = ZZS.ZZS_FILIAL AND ZZT.ZZT_NUMLIB = ZZS.ZZS_NUMLIB " +
+            "WHERE ZZT.D_E_L_E_T_ = '' AND ZZS.D_E_L_E_T_ = '' AND ZZS.ZZS_RESULT <> 'S' AND ZZS.ZZS_COMPMO <> '' " +
+            "AND ZZT.ZZT_DATAI >= '" + dataDe + "' " +
+            "AND ZZT.ZZT_DATAI <= '" + dataAte + "' " +
+            "ORDER BY ZZT.ZZT_NUMLIB, ZZT.ZZT_NUMANA";
+        var correcoesTO = [];
+        for row in QuerySql(queryCorrTO) {
+            correcoesTO.push(row);
+        }
+
+        return {
+            todasLiberacoes: todasLiberacoes,
+            todasLiberacoesStats: libStats.stats,
+            todasCorrecoes: todasCorrecoes,
+            todasCorrecoesStats: corrStats.stats,
+            liberacoesSemTO: liberacoesSemTO,
+            liberacoesTO: liberacoesTO,
+            correcoesSemTO: correcoesSemTO,
+            correcoesTO: correcoesTO
+        };
+    }
+
+    // Função auxiliar para cálculos de liberações (com agrupamentos avançados)
+    function calcLiberacoes(rows) {
+        var nTotLib = 0, nTotCorr = 0, nAprov = 0, nReprv = 0, nSomaMin = 0, nQtdMin = 0;
+        var aLibMaq = {}, aTons = {"Claro":0, "Escuro":0, "Médio":0, "Branco":0};
+        var aLibPorTec = {}, aLibPorTonTec = {}, aLibPorOPTec = {}, aLibPorDia = {};
+        var liberacoes = [];
+        for (var row of rows) {
+            liberacoes.push(row);
+            nTotLib++;
+            if (row.ZZS_RESULT == "A") nAprov++;
+            if (row.ZZS_RESULT == "R") nReprv++;
+            if (row.ZZS_TONALI == "1") aTons["Claro"]++;
+            if (row.ZZS_TONALI == "2") aTons["Escuro"]++;
+            if (row.ZZS_TONALI == "3") aTons["Médio"]++;
+            if (row.ZZS_TONALI == "4") aTons["Branco"]++;
+            if (row.ZZS_MAQUIN) {
+                if (!aLibMaq[row.ZZS_MAQUIN]) aLibMaq[row.ZZS_MAQUIN] = 0;
+                aLibMaq[row.ZZS_MAQUIN]++;
+            }
+            // Agrupamento por técnico
+            if (row.ZZS_USLIBF) {
+                if (!aLibPorTec[row.ZZS_USLIBF]) aLibPorTec[row.ZZS_USLIBF] = 0;
+                aLibPorTec[row.ZZS_USLIBF]++;
+            }
+            // Agrupamento por técnico/tonalidade
+            var ton = row.ZZS_TONALI;
+            if (row.ZZS_USLIBF && ton) {
+                var key = row.ZZS_USLIBF + "|" + ton;
+                if (!aLibPorTonTec[key]) aLibPorTonTec[key] = 0;
+                aLibPorTonTec[key]++;
+            }
+            // Agrupamento por técnico/OP
+
+    @Get("/relatorio-cor")
+    action relatorioCor(
+        dataDe: string,
+        dataAte: string,
+        completo: bool
+    ) {
+        // ...consultas e cálculos como antes...
+        // ...existing code...
+
+        // NOVO: Exportação para Excel
+        if (completo) {
+            exportaExcel({
+                todasLiberacoes: todasLiberacoes,
+                todasLiberacoesStats: libStats.stats,
+                todasCorrecoes: todasCorrecoes,
+                todasCorrecoesStats: corrStats.stats,
+                liberacoesSemTO: liberacoesSemTO,
+                liberacoesTO: liberacoesTO,
+                correcoesSemTO: correcoesSemTO,
+                correcoesTO: correcoesTO
+            });
+        }
+
+        return {
+            todasLiberacoes: todasLiberacoes,
+            todasLiberacoesStats: libStats.stats,
+            todasCorrecoes: todasCorrecoes,
+            todasCorrecoesStats: corrStats.stats,
+            liberacoesSemTO: liberacoesSemTO,
+            liberacoesTO: liberacoesTO,
+            correcoesSemTO: correcoesSemTO,
+            correcoesTO: correcoesTO
+        };
+    }
+
+    // Função para exportar relatório para Excel
+    function exportaExcel(relatorio) {
+        const XLSX = require('xlsx');
+        var wb = XLSX.utils.book_new();
+
+        // Helper para criar aba
+        function addSheet(nome, dados, stats) {
+            var ws = XLSX.utils.json_to_sheet(dados);
+            XLSX.utils.book_append_sheet(wb, ws, nome);
+            // Adiciona estatísticas como linhas extras
+            if (stats) {
+                var statRows = [];
+                for (var k in stats) {
+                    statRows.push({ Estatistica: k, Valor: JSON.stringify(stats[k]) });
+                }
+                var wsStats = XLSX.utils.json_to_sheet(statRows);
+                XLSX.utils.book_append_sheet(wb, wsStats, nome + '_Stats');
+            }
+        }
+
+        addSheet('TodasLiberacoes', relatorio.todasLiberacoes, relatorio.todasLiberacoesStats);
+        addSheet('TodasCorrecoes', relatorio.todasCorrecoes, relatorio.todasCorrecoesStats);
+        addSheet('LiberacoesSemTO', relatorio.liberacoesSemTO);
+        addSheet('LiberacoesTO', relatorio.liberacoesTO);
+        addSheet('CorrecoesSemTO', relatorio.correcoesSemTO);
+        addSheet('CorrecoesTO', relatorio.correcoesTO);
+
+        // Salva arquivo Excel
+        var filePath = './RelatorioCor_' + (new Date().toISOString().slice(0,10)) + '.xlsx';
+        XLSX.writeFile(wb, filePath);
+    }
+                var nFim = parseInt(row.ZZT_HORAF.substr(0,2)) * 60 + parseInt(row.ZZT_HORAF.substr(3,2));
+                var nDif = nFim - nIni;
+                if (nDif < 0) nDif += 1440;
+                if (nDif > 0) { nTotTmp += nDif; nQtdTmp++; }
+            }
+        }
+        var cMedTmp = "00:00:00";
+        if (nQtdTmp > 0) {
+            var nMedTmp = nTotTmp / nQtdTmp;
+            var nHoras = Math.floor(nMedTmp / 60);
+            var nMin = Math.floor(nMedTmp % 60);
+            var nSeg = Math.floor((nMedTmp - Math.floor(nMedTmp)) * 60);
+            cMedTmp = ("0"+nHoras).slice(-2) + ":" + ("0"+nMin).slice(-2) + ":" + ("0"+nSeg).slice(-2);
+        }
+        return {
+            correcoes: correcoes,
+            stats: {
+                totalPigmento: nTotPig,
+                totalPorPigmento: aPigTot,
+                totalPorTecnico: aTecPig,
+                totalPorOPTecnico: aOPTec,
+                totalCorrecaoUnica: aCorUnic,
+                totalPorTecnicoTonalidade: aTecTon,
+                totalPigmentoPorTecnicoTonalidade: aPigTecTon,
+                tempoPorTecnicoTonalidade: aTmpTecTon,
+                tempoMedioTotal: cMedTmp
+            }
+        };
+    }
+
