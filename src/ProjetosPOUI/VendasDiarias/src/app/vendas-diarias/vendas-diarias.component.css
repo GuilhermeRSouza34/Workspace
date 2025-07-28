@@ -1,0 +1,227 @@
+/* Vendas Diarias Component Styles */
+
+.content-wrapper {
+  padding: 20px;
+  min-height: calc(100vh - 60px);
+}
+
+.header-section {
+  background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+  color: white;
+  padding: 30px;
+  border-radius: 8px;
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.header-section h1 {
+  margin: 0 0 10px 0;
+  font-size: 28px;
+  font-weight: 300;
+}
+
+.header-section p {
+  margin: 0;
+  font-size: 16px;
+  opacity: 0.9;
+}
+
+.totals-card {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 20px;
+  margin: 20px 0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.totals-card h3 {
+  margin: 0 0 20px 0;
+  color: #495057;
+  font-weight: 500;
+}
+
+.metric-card {
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 20px;
+  margin: 5px;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  transition: all 0.3s ease;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.metric-value {
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 8px;
+  line-height: 1.2;
+}
+
+.metric-label {
+  font-size: 12px;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+.positive-value {
+  color: #28a745;
+}
+
+.negative-value {
+  color: #dc3545;
+}
+
+.neutral-value {
+  color: #17a2b8;
+}
+
+/* Form Styles */
+.po-container form {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  margin-bottom: 20px;
+}
+
+/* Widget Styles */
+.po-widget {
+  margin: 20px 0;
+}
+
+/* Table Customizations */
+::ng-deep .po-table {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+::ng-deep .po-table-header {
+  background: linear-gradient(135deg, #495057 0%, #6c757d 100%);
+  color: white;
+}
+
+::ng-deep .po-table-row:hover {
+  background-color: #f8f9fa;
+}
+
+::ng-deep .po-table-row-alternate {
+  background-color: #fbfbfb;
+}
+
+/* Button customizations */
+::ng-deep .po-button-primary {
+  background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+  border: none;
+}
+
+::ng-deep .po-button-secondary {
+  background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+  border: none;
+}
+
+/* Loading state */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .header-section h1 {
+    font-size: 24px;
+  }
+  
+  .header-section p {
+    font-size: 14px;
+  }
+  
+  .metric-card {
+    margin: 10px 0;
+  }
+  
+  .metric-value {
+    font-size: 20px;
+  }
+  
+  .content-wrapper {
+    padding: 10px;
+  }
+}
+
+@media (max-width: 576px) {
+  .header-section {
+    padding: 20px;
+  }
+  
+  .header-section h1 {
+    font-size: 20px;
+  }
+  
+  .metric-value {
+    font-size: 18px;
+  }
+}
+
+/* Animation for data loading */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.po-widget,
+.totals-card {
+  animation: fadeIn 0.5s ease-out;
+}
+
+/* Status indicators */
+.status-success {
+  color: #28a745;
+  font-weight: bold;
+}
+
+.status-warning {
+  color: #ffc107;
+  font-weight: bold;
+}
+
+.status-danger {
+  color: #dc3545;
+  font-weight: bold;
+}
+
+/* Custom tooltip styles */
+::ng-deep .po-tooltip {
+  background-color: #333;
+  color: white;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
