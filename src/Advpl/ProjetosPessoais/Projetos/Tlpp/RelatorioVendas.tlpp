@@ -1,0 +1,91 @@
+// RelatorioVendas.tlpp
+// Relatório que mostra todas as notas fiscais e data fat de pedidos com vima
+
+@Rest
+class RelatorioVendas {
+    @Get("/relatorio-vendas")
+    action relatorioVendas(
+        cliente: string
+    ) {
+        // Consulta Fatura Tudo
+        var queryFatura = "SELECT F2.F2_EMISSAO, C6.C6_TES, F2.F2_DOC, A1.A1_COD, A1.A1_NOME, " +
+            "C5.C5_NUM, C6.C6_QTDVEN, C6.C6_PRODUTO, B1.B1_DESC, C6.C6_PRCVEN, " +
+            "(C6.C6_QTDVEN * C6.C6_PRCVEN) AS TOTAL_IBRATIN, " +
+            "C6.C6_VLUNVIM, (C6.C6_QTDVEN * C6.C6_VLUNVIM) AS C6_VLVIMA " +
+            "FROM SC6 C6 " +
+            "INNER JOIN SC5 C5 ON C5.C5_NUM = C6.C6_NUM AND C5.C5_FILIAL = C6.C6_FILIAL AND C5.D_E_L_E_T_ = '' " +
+            "LEFT JOIN SF2 F2 ON F2.F2_DOC = C6.C6_NOTA AND F2.F2_FILIAL = C6.C6_FILIAL AND F2.D_E_L_E_T_ = '' " +
+            "LEFT JOIN SA1 A1 ON A1.A1_COD = C5.C5_CLIENTE AND A1.A1_FILIAL = '' AND A1.D_E_L_E_T_ = '' " +
+            "LEFT JOIN SB1 B1 ON B1.B1_COD = C6.C6_PRODUTO AND B1.B1_FILIAL = '' AND B1.D_E_L_E_T_ = '' " +
+            "WHERE C5.C5_TIPOSAI = 'D' AND C6.D_E_L_E_T_ = '' " +
+            "AND A1.A1_COD = '" + cliente + "' " +
+            "ORDER BY C5.C5_NUM";
+
+        var faturaTudo = [];
+        for row in QuerySql(queryFatura) {
+            faturaTudo.push({
+                cliente: row.A1_COD,
+                nome: row.A1_NOME,
+                pedido: row.C5_NUM,
+                documento: row.F2_DOC,
+                produto: row.C6_PRODUTO,
+                descricao: row.B1_DESC,
+                emissao: row.F2_EMISSAO,
+                tes: row.C6_TES,
+                qtdVendida: row.C6_QTDVEN,
+                vlUnitIbratin: row.C6_PRCVEN,
+                totalIbratin: row.TOTAL_IBRATIN,
+                vlUnitVima: row.C6_VLUNVIM,
+                totalVima: row.C6_VLVIMA
+            });
+        }
+
+        // Consulta Simples Remessa
+        var queryRemessa = "SELECT C6.C6_TES, C6.C6_QTDENT, C6.C6_QTDVEN, " +
+            "(C6.C6_QTDVEN - C6.C6_QTDENT) AS SALDO_ENTREGA, " +
+            "((C6.C6_QTDVEN - C6.C6_QTDENT) * C6.C6_PRCVEN) AS VALOR_PENDENTE, " +
+            "C6.C6_PRODUTO, C5.C5_CLIENTE, A1.A1_NOME, C5.C5_EMISSAO, C5.C5_NUM, B1.B1_DESC, C5.C5_OBSPED1 " +
+            "FROM SC6 C6 " +
+            "INNER JOIN SC5 C5 ON C5.C5_NUM = C6.C6_NUM AND C5.C5_FILIAL = C6.C6_FILIAL " +
+            "LEFT JOIN SA1 A1 ON A1.A1_COD = C5.C5_CLIENTE AND A1.A1_FILIAL = '' AND A1.D_E_L_E_T_ = '' " +
+            "LEFT JOIN SB1 B1 ON B1.B1_COD = C6.C6_PRODUTO AND B1.B1_FILIAL = '' AND B1.D_E_L_E_T_ = '' " +
+            "WHERE C5.C5_TIPOSAI = 'E' AND C6.D_E_L_E_T_ = '' AND C5.D_E_L_E_T_ = '' " +
+            "AND A1.A1_COD = '" + cliente + "' " +
+            "AND EXISTS (SELECT 1 FROM SC6 C6F WHERE C6F.C6_TES IN ('506', '721') AND C6F.C6_PRODUTO = C6.C6_PRODUTO AND C6F.C6_FILIAL = C6.C6_FILIAL AND C6F.D_E_L_E_T_ = '') " +
+            "ORDER BY C6.C6_PRODUTO";
+
+        var simplesRemessa = [];
+        for row in QuerySql(queryRemessa) {
+            // Extrai código de fatura referência
+            var faturaRef = "";
+            if (row.C5_OBSPED1) {
+                if (row.C5_OBSPED1.indexOf("FT") >= 0) {
+                    faturaRef = row.C5_OBSPED1.substr(row.C5_OBSPED1.indexOf("FT") + 2, 7).trim();
+                } else if (row.C5_OBSPED1.indexOf("TUDO N") >= 0) {
+                    faturaRef = row.C5_OBSPED1.substr(row.C5_OBSPED1.indexOf("TUDO N") + 7, 7).trim();
+                } else if (row.C5_OBSPED1.indexOf("TUDO") >= 0) {
+                    faturaRef = row.C5_OBSPED1.substr(row.C5_OBSPED1.indexOf("TUDO") + 4, 7).trim();
+                }
+            }
+            simplesRemessa.push({
+                cliente: row.C5_CLIENTE,
+                nome: row.A1_NOME,
+                pedido: row.C5_NUM,
+                produto: row.C6_PRODUTO,
+                descricao: row.B1_DESC,
+                tes: row.C6_TES,
+                qtdVendida: row.C6_QTDVEN,
+                qtdEntregue: row.C6_QTDENT,
+                saldoEntrega: row.SALDO_ENTREGA,
+                valorPendente: row.VALOR_PENDENTE,
+                emissao: row.C5_EMISSAO,
+                faturaRef: faturaRef
+            });
+        }
+
+        return {
+            faturaTudo: faturaTudo,
+            simplesRemessa: simplesRemessa
+        };
+    }
+}
