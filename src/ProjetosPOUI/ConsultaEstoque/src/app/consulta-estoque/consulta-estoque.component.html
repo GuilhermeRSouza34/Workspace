@@ -1,7 +1,6 @@
 <po-page-default 
   p-title="Consulta de Estoque"
-  [p-actions]="pageActions"
-  [p-loading]="loading">
+  [p-actions]="pageActions">
 
   <!-- Formulário de Filtros -->
   <form [formGroup]="formFiltros" class="filtros-container">
@@ -59,31 +58,17 @@
       [p-columns]="columns"
       [p-items]="produtos"
       [p-loading]="loading"
-      p-selectable="false"
-      p-striped="true"
-      p-sort="true"
-      p-show-more-disabled="false"
-      (p-row-select)="onRowSelect($event)">
-
-      <!-- Template customizado para status -->
-      <ng-template p-table-row-template let-row let-rowIndex="rowIndex">
-        <po-table-row [p-row]="row" [p-columns]="columns">
-          <!-- Célula customizada para saldo com cor -->
-          <po-table-cell 
-            [ngClass]="{
-              'text-success': row.saldoAtual > 0,
-              'text-danger': row.saldoAtual <= 0
-            }">
-            {{ row.saldoAtual | number:'1.2-2' }}
-          </po-table-cell>
-        </po-table-row>
-      </ng-template>
+      [p-selectable]="false"
+      [p-striped]="true"
+      [p-sort]="true"
+      [p-show-more-disabled]="false">
 
       <!-- Mensagem quando não há dados -->
-      <po-table-subtitle 
+      <div 
         *ngIf="produtos.length === 0 && !loading"
-        p-subtitle="Nenhum produto encontrado. Use os filtros acima para realizar uma consulta.">
-      </po-table-subtitle>
+        class="po-text-center po-mt-3">
+        <p>Nenhum produto encontrado. Use os filtros acima para realizar uma consulta.</p>
+      </div>
 
     </po-table>
   </div>
@@ -97,25 +82,25 @@
       <div class="po-sm-3">
         <po-info 
           p-label="Total de Produtos"
-          [p-value]="produtos.length">
+          [p-value]="getTotalProdutos()">
         </po-info>
       </div>
       <div class="po-sm-3">
         <po-info 
           p-label="Com Saldo Positivo"
-          [p-value]="produtos.filter(p => p.saldoAtual > 0).length">
+          [p-value]="getProdutosComSaldo()">
         </po-info>
       </div>
       <div class="po-sm-3">
         <po-info 
           p-label="Sem Saldo"
-          [p-value]="produtos.filter(p => p.saldoAtual <= 0).length">
+          [p-value]="getProdutosSemSaldo()">
         </po-info>
       </div>
       <div class="po-sm-3">
         <po-info 
           p-label="Valor Total do Estoque"
-          [p-value]="calcularValorTotal() | currency:'BRL':'symbol':'1.2-2'">
+          [p-value]="getValorTotalFormatado()">
         </po-info>
       </div>
     </div>

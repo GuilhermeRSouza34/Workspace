@@ -1,5 +1,6 @@
 import { Component } from '@angular/core';
-import { PoMenuItem, PoMenuPanelItem } from '@po-ui/ng-components';
+import { Router } from '@angular/router';
+import { PoMenuItem } from '@po-ui/ng-components';
 
 @Component({
   selector: 'app-root',
@@ -7,13 +8,20 @@ import { PoMenuItem, PoMenuPanelItem } from '@po-ui/ng-components';
   styleUrls: ['./app.component.css']
 })
 export class AppComponent {
-  title = 'Consulta de Estoque';
+  title = 'Sistema de Consulta de Estoque';
 
   readonly menus: Array<PoMenuItem> = [
-    { label: 'Consulta de Estoque', action: this.onClick.bind(this), icon: 'po-icon-stock' }
+    { 
+      label: 'Consulta de Estoque', 
+      action: this.navegarParaConsulta.bind(this), 
+      icon: 'po-icon-stock',
+      shortLabel: 'Estoque'
+    }
   ];
 
-  private onClick() {
-    // Navegação já está configurada no routing
+  constructor(private router: Router) {}
+
+  private navegarParaConsulta(): void {
+    this.router.navigate(['/consulta-estoque']);
   }
 }

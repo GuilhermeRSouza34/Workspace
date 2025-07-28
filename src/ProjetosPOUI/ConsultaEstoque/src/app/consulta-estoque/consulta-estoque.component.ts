@@ -17,7 +17,7 @@ import { ProdutoEstoque, FiltroConsulta, LocalEstoque, CategoriaEstoque } from '
   styleUrls: ['./consulta-estoque.component.css']
 })
 export class ConsultaEstoqueComponent implements OnInit {
-  formFiltros: FormGroup;
+  formFiltros!: FormGroup;
   produtos: ProdutoEstoque[] = [];
   locais: PoSelectOption[] = [];
   categorias: PoSelectOption[] = [];
@@ -76,6 +76,11 @@ export class ConsultaEstoqueComponent implements OnInit {
       label: 'Exportar', 
       action: this.exportar.bind(this),
       icon: 'po-icon-export'
+    },
+    { 
+      label: 'Testar Conexão', 
+      action: this.testarConexao.bind(this),
+      icon: 'po-icon-refresh'
     }
   ];
 
@@ -89,6 +94,8 @@ export class ConsultaEstoqueComponent implements OnInit {
 
   ngOnInit(): void {
     this.carregarDadosIniciais();
+    // Dados mock para demonstração
+    this.carregarDadosMock();
   }
 
   private criarFormulario(): void {
@@ -167,8 +174,41 @@ export class ConsultaEstoqueComponent implements OnInit {
       return;
     }
 
-    // Implementar exportação para Excel/CSV
-    this.poNotification.information('Funcionalidade de exportação será implementada');
+    try {
+      // Converter dados para CSV
+      const headers = ['Código', 'Descrição', 'Categoria', 'Local', 'Unidade', 'Saldo Atual', 'Saldo Disponível', 'Custo Médio', 'Preço Venda'];
+      const csvData = this.produtos.map(produto => [
+        produto.codigo,
+        produto.descricao,
+        produto.categoria,
+        produto.local,
+        produto.unidade,
+        produto.saldoAtual,
+        produto.saldoDisponivel,
+        produto.custoMedio.toFixed(2),
+        produto.precoVenda.toFixed(2)
+      ]);
+
+      const csvContent = [headers, ...csvData]
+        .map(row => row.map(field => `"${field}"`).join(','))
+        .join('\n');
+
+      // Criar e fazer download do arquivo
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `consulta-estoque-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      this.poNotification.success('Arquivo exportado com sucesso!');
+    } catch (error) {
+      this.poNotification.error('Erro ao exportar arquivo');
+      console.error('Erro na exportação:', error);
+    }
   }
 
   // Métodos para eventos da tabela
@@ -176,10 +216,113 @@ export class ConsultaEstoqueComponent implements OnInit {
     console.log('Produto selecionado:', event);
   }
 
+  // Método para testar conectividade
+  testarConexao(): void {
+    this.loading = true;
+    this.poNotification.information('Testando conectividade com a API...');
+
+    this.estoqueService.testarConectividade().subscribe({
+      next: () => {
+        this.poNotification.success('✅ Conexão com a API funcionando corretamente!');
+      },
+      error: (error: any) => {
+        this.poNotification.error(`❌ Erro de conectividade: ${error.message}`);
+        console.error('Erro no teste de conectividade:', error);
+      },
+      complete: () => {
+        this.loading = false;
+      }
+    });
+  }
+
   // Método para calcular valor total do estoque
   calcularValorTotal(): number {
     return this.produtos.reduce((total, produto) => {
       return total + (produto.saldoAtual * produto.custoMedio);
     }, 0);
+  }
+
+  // Métodos auxiliares para o template
+  getTotalProdutos(): string {
+    return this.produtos.length.toString();
+  }
+
+  getProdutosComSaldo(): string {
+    return this.produtos.filter(p => p.saldoAtual > 0).length.toString();
+  }
+
+  getProdutosSemSaldo(): string {
+    return this.produtos.filter(p => p.saldoAtual <= 0).length.toString();
+  }
+
+  getValorTotalFormatado(): string {
+    const valor = this.calcularValorTotal();
+    return new Intl.NumberFormat('pt-BR', { 
+      style: 'currency', 
+      currency: 'BRL' 
+    }).format(valor);
+  }
+
+  // Dados mock para demonstração (remove quando backend estiver funcionando)
+  private carregarDadosMock(): void {
+    // Locais mock
+    this.locais = [
+      { value: '01', label: '01 - Estoque Principal' },
+      { value: '02', label: '02 - Estoque Filial' },
+      { value: '03', label: '03 - Estoque Terceiros' }
+    ];
+
+    // Categorias mock
+    this.categorias = [
+      { value: '001', label: '001 - Produtos Acabados' },
+      { value: '002', label: '002 - Matéria Prima' },
+      { value: '003', label: '003 - Produtos em Processo' }
+    ];
+
+    // Produtos mock (para demonstração)
+    this.produtos = [
+      {
+        codigo: 'PROD001',
+        descricao: 'Produto Teste 1',
+        categoria: '001',
+        unidade: 'UN',
+        local: '01',
+        saldoAtual: 100,
+        saldoDisponivel: 90,
+        saldoReservado: 10,
+        custoMedio: 15.50,
+        precoVenda: 25.00,
+        ultimaMovimentacao: new Date('2025-01-15'),
+        ativo: true
+      },
+      {
+        codigo: 'PROD002',
+        descricao: 'Produto Teste 2',
+        categoria: '002',
+        unidade: 'KG',
+        local: '01',
+        saldoAtual: 50,
+        saldoDisponivel: 45,
+        saldoReservado: 5,
+        custoMedio: 8.75,
+        precoVenda: 15.00,
+        ultimaMovimentacao: new Date('2025-01-20'),
+        ativo: true
+      },
+      {
+        codigo: 'PROD003',
+        descricao: 'Produto Teste 3',
+        categoria: '001',
+        unidade: 'UN',
+        local: '02',
+        saldoAtual: 0,
+        saldoDisponivel: 0,
+        saldoReservado: 0,
+        custoMedio: 12.30,
+        precoVenda: 20.00,
+        ultimaMovimentacao: new Date('2025-01-10'),
+        ativo: true
+      }
+    ];
   }
 }
