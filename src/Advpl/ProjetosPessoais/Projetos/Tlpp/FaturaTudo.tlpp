@@ -1,0 +1,151 @@
+// FaturaTudo.tlpp
+// Relatório que mostra todas as notas fiscais e data fat de pedidos com vima
+
+@Rest
+class FaturaTudo {
+    @Get("/fatura-tudo")
+    action faturaTudo(
+        cliente: string
+    ) {
+        // Query Fatura Tudo
+        var queryFatura = "SELECT F2.F2_EMISSAO, C6.C6_TES, F2.F2_DOC, A1.A1_COD, A1.A1_NOME, " +
+            "C5.C5_NUM, C6.C6_QTDVEN, C6.C6_PRODUTO, B1.B1_DESC, C6.C6_PRCVEN, " +
+            "(C6.C6_QTDVEN * C6.C6_PRCVEN) AS TOTAL_IBRATIN, " +
+            "C6.C6_VLUNVIM, (C6.C6_QTDVEN * C6.C6_VLUNVIM) AS C6_VLVIMA " +
+            "FROM SC6 C6 " +
+            "INNER JOIN SC5 C5 ON C5.C5_NUM = C6.C6_NUM AND C5.C5_FILIAL = C6.C6_FILIAL AND C5.D_E_L_E_T_ = '' " +
+            "LEFT JOIN SF2 F2 ON F2.F2_DOC = C6.C6_NOTA AND F2.F2_FILIAL = C6.C6_FILIAL AND F2.D_E_L_E_T_ = '' " +
+            "LEFT JOIN SA1 A1 ON A1.A1_COD = C5.C5_CLIENTE AND A1.A1_FILIAL = '' AND A1.D_E_L_E_T_ = '' " +
+            "LEFT JOIN SB1 B1 ON B1.B1_COD = C6.C6_PRODUTO AND B1.B1_FILIAL = '' AND B1.D_E_L_E_T_ = '' " +
+            "WHERE C5.C5_TIPOSAI = 'D' AND C6.D_E_L_E_T_ = '' " +
+            "AND A1.A1_COD = '" + cliente + "' " +
+            "ORDER BY C5.C5_NUM";
+
+        var faturaTudo = QuerySql(queryFatura);
+
+        // Query Simples Remessa
+        var queryRemessa = "SELECT C6.C6_TES, C6.C6_QTDENT, C6.C6_QTDVEN, " +
+            "(C6.C6_QTDVEN - C6.C6_QTDENT) AS SALDO_ENTREGA, " +
+            "((C6.C6_QTDVEN - C6.C6_QTDENT) * C6.C6_PRCVEN) AS VALOR_PENDENTE, " +
+            "C6.C6_PRODUTO, C5.C5_CLIENTE, A1.A1_NOME, C5.C5_EMISSAO, C5.C5_NUM, B1.B1_DESC, C5.C5_OBSPED1 " +
+            "FROM SC6 C6 " +
+            "INNER JOIN SC5 C5 ON C5.C5_NUM = C6.C6_NUM AND C5.C5_FILIAL = C6.C6_FILIAL " +
+            "LEFT JOIN SA1 A1 ON A1.A1_COD = C5.C5_CLIENTE AND A1.A1_FILIAL = '' AND A1.D_E_L_E_T_ = '' " +
+            "LEFT JOIN SB1 B1 ON B1.B1_COD = C6.C6_PRODUTO AND B1.B1_FILIAL = '' AND B1.D_E_L_E_T_ = '' " +
+            "WHERE C5.C5_TIPOSAI = 'E' AND C6.D_E_L_E_T_ = '' AND C5.D_E_L_E_T_ = '' " +
+            "AND A1.A1_COD = '" + cliente + "' " +
+            "AND EXISTS (SELECT 1 FROM SC6 C6F WHERE C6F.C6_TES IN ('506', '721') AND C6F.C6_PRODUTO = C6.C6_PRODUTO AND C6F.C6_FILIAL = C6.C6_FILIAL AND C6F.D_E_L_E_T_ = '') " +
+            "ORDER BY C6.C6_PRODUTO";
+
+        var simplesRemessa = QuerySql(queryRemessa);
+
+        // Exporta para Excel
+        exportaExcel(faturaTudo, simplesRemessa);
+
+        return {
+            faturaTudo: faturaTudo,
+            simplesRemessa: simplesRemessa
+        };
+    }
+
+    // Função para exportar para Excel
+    function exportaExcel(faturaTudo, simplesRemessa) {
+        const XLSX = require('xlsx');
+        var wb = XLSX.utils.book_new();
+
+        // Aba 1: Fatura Tudo
+        var ws1Data = faturaTudo.map(row => ({
+            'Código do Cliente': row.A1_COD,
+            'Nome do Cliente': row.A1_NOME,
+            'Número do Pedido': row.C5_NUM,
+            'Número do Documento': row.F2_DOC,
+            'Código do Produto': row.C6_PRODUTO,
+            'Descrição do Produto': row.B1_DESC,
+            'Data de Emissão': row.F2_EMISSAO,
+            'TES': row.C6_TES,
+            'Quantidade Vendida': row.C6_QTDVEN,
+            'Valor Unitário Ibratin': row.C6_PRCVEN,
+            'Total Ibratin': row.TOTAL_IBRATIN,
+            'Valor Unitário Vima': row.C6_VLUNVIM,
+            'Total Vima': row.C6_VLVIMA
+        }));
+        var ws1 = XLSX.utils.json_to_sheet(ws1Data);
+        XLSX.utils.book_append_sheet(wb, ws1, 'FaturaTudo');
+
+        // Aba 2: Simples Remessa
+        var ws2Data = [];
+        var lastCliente = '', lastProduto = '', nTotalProduto = 0, lastFaturaRef = '', cFaturaRef = '';
+        for (var i = 0; i < simplesRemessa.length; i++) {
+            var row = simplesRemessa[i];
+            // Extrai referência
+            cFaturaRef = '';
+            if (row.C5_OBSPED1) {
+                if (row.C5_OBSPED1.includes('FT'))
+                    cFaturaRef = row.C5_OBSPED1.substr(row.C5_OBSPED1.indexOf('FT') + 2, 7).trim();
+                else if (row.C5_OBSPED1.includes('TUDO N'))
+                    cFaturaRef = row.C5_OBSPED1.substr(row.C5_OBSPED1.indexOf('TUDO N') + 7, 7).trim();
+                else if (row.C5_OBSPED1.includes('TUDO'))
+                    cFaturaRef = row.C5_OBSPED1.substr(row.C5_OBSPED1.indexOf('TUDO') + 4, 7).trim();
+            }
+            // Agrupamento e totais por produto/cliente
+            if (lastCliente !== '' && lastProduto !== '' && (lastCliente !== row.C5_CLIENTE || lastProduto !== row.C6_PRODUTO)) {
+                ws2Data.push({
+                    'Código do Cliente': lastCliente,
+                    'Nome do Cliente': '',
+                    'Número do Pedido': '',
+                    'Código do Produto': lastProduto,
+                    'Descrição do Produto': 'Total do Produto',
+                    'TES': '',
+                    'Quantidade Vendida': nTotalProduto,
+                    'Quantidade Entregue': '',
+                    'Saldo de Entrega': '',
+                    'Valor Pendente': '',
+                    'Data de Emissão': '',
+                    'Fatura Referência': ''
+                });
+                nTotalProduto = 0;
+            }
+            nTotalProduto += row.C6_QTDVEN;
+            ws2Data.push({
+                'Código do Cliente': row.C5_CLIENTE,
+                'Nome do Cliente': row.A1_NOME,
+                'Número do Pedido': row.C5_NUM,
+                'Código do Produto': row.C6_PRODUTO,
+                'Descrição do Produto': row.B1_DESC,
+                'TES': row.C6_TES,
+                'Quantidade Vendida': row.C6_QTDVEN,
+                'Quantidade Entregue': row.C6_QTDENT,
+                'Saldo de Entrega': row.SALDO_ENTREGA,
+                'Valor Pendente': row.VALOR_PENDENTE,
+                'Data de Emissão': row.C5_EMISSAO,
+                'Fatura Referência': cFaturaRef
+            });
+            lastCliente = row.C5_CLIENTE;
+            lastProduto = row.C6_PRODUTO;
+            lastFaturaRef = cFaturaRef;
+        }
+        // Total do último produto
+        if (lastCliente !== '' && lastProduto !== '') {
+            ws2Data.push({
+                'Código do Cliente': lastCliente,
+                'Nome do Cliente': '',
+                'Número do Pedido': '',
+                'Código do Produto': lastProduto,
+                'Descrição do Produto': 'Total do Produto',
+                'TES': '',
+                'Quantidade Vendida': nTotalProduto,
+                'Quantidade Entregue': '',
+                'Saldo de Entrega': '',
+                'Valor Pendente': '',
+                'Data de Emissão': '',
+                'Fatura Referência': ''
+            });
+        }
+        var ws2 = XLSX.utils.json_to_sheet(ws2Data);
+        XLSX.utils.book_append_sheet(wb, ws2, 'SimplesRemessa');
+
+        // Salva arquivo Excel
+        var filePath = './FaturaTudo_' + (new Date().toISOString().slice(0,10)) + '.xlsx';
+        XLSX.writeFile(wb, filePath);
+    }
+}
