@@ -1,0 +1,247 @@
+#include "topconn.ch"
+#Include "Rwmake.ch"
+#Include "TOTVS.CH"
+#include "colors.ch"
+#include "MsObject.ch"
+#include "MSGRAPHI.CH"
+#include "AP5MAIL.CH"
+
+
+/*/{Protheus.doc} RFATA03
+Rotina Solicitacao de coleta de materiais.
+@type function
+@version  12.1.33
+@author Carlos Cleuber Pereira
+@since 01/09/2022
+/*/
+User Function RFATA03()
+
+Private oFTahoma8B := TFont():New("Tahoma",,016,,.T.,,,,,.F.,.F.)
+Private oFTahoma8R := TFont():New("Tahoma",,016,,.T.,,,,,.F.,.F.)
+
+Private cPerg 	:= PADR("RFAT03NEW",10," ")
+Private aPColeta := {}
+Private oBrwAlt
+Private cMark   := GetMark()
+Private oMark//Cria um arquivo de Apoio
+Private oBtnSel
+Private aCpoBro := {}
+Private oOk     := LoadBitMap(GetResources(), "LBOK")
+Private oNo     := LoadBitMap(GetResources(), "LBNO")
+Private oSayTransp, oSay1
+Private nQtdSel:= nPesoSel:= nQtdSdo:= nVlrSel:= 0
+Private cNColeta := SPACE(10)
+Private cGetNCol:= Space(10)
+Private cGetCont :=Space(30)
+
+@ 043, 015 SAY oSayTSel PROMPT 0 SIZE 030, 008 OF oDlg PICTURE "@E 9999" FONT oFTahoma8R COLORS 255, 16777215 PIXEL
+@ 035, 120 SAY oSay3 PROMPT "Peso " SIZE 100, 010 OF oDlg FONT oFTahoma8B COLORS CLR_BLUE, 16777215 PIXEL
+
+@ 045, 450 SAY oSay6 PROMPT "Botao Direito  -> Altera Quantidade. " SIZE 200, 156 OF oDlg FONT oFTahoma8B COLORS CLR_BLUE, 16777215 PIXEL
+
+@Rest
+class ColetaMateriais {
+cQuery += "			 C6.D_E_L_E_T_ = '' AND "
+cQuery += "			 B1.D_E_L_E_T_ = '' AND "
+cQuery += " 			 A3.A3_FILIAL ='"+xFilial("SA3")+"' AND "
+cQuery += "GROUP BY 	 C5.C5_TRANSP, C5.C5_TPFRETE, A4.A4_NOME, C6.C6_NUM, C6.C6_ITEM,C6.C6_PRODUTO, C6.C6_LOCAL, B1.B1_DESC, "
+cQuery +=	"  			 C5.C5_CLIENTE, A1.A1_NOME,A1_XDINIFT, A1_XDFIMFT, A4.A4_EMAIL, C5.C5_VEND1, A3.A3_EMAIL, C6.C6_ENTREG, C6.C6_QTDVEN, C6.C6_QTDENT, "
+cQuery +=	" 			 B1.B1_PESOBRU,B1.B1_PESO,  C6.C6_PRCVEN "
+cQuery += "ORDER BY 	 C5.C5_TRANSP, C6.C6_NUM, C6.C6_ITEM, C6.C6_PRODUTO, B1.B1_DESC "
+
+TCQUERY cQuery NEW ALIAS "XSC6"
+
+TcSetField("XSC6","C6_ENTREG","D",8)
+TcSetField("XSC6","PESO","N",11,4)
+TcSetField("XSC6","PESO_LIQ","N",9,2)
+TcSetField("XSC6","C6_PRCVEN","N",9,2)
+TcSetField("XSC6","PVENDA","N",9,2)
+TcSetField("XSC6","PLIQUID","N",11,4)
+
+
+	If XSC6->C6_LOCAL == "01"
+
+		DbSelectArea("SC2")
+		SC2->(DbSetOrder(1))
+		If ! SC2->(DbSeek(xFilial("SC2")+XSC6->C6_NUM+XSC6->C6_ITEM,.T.))
+
+			DbSelectArea("XSC6")
+			XSC6->(dbSkip())
+			Loop
+
+		Else
+
+			If !Empty(XSC6->A1_XDINIFT) .and. !Empty(XSC6->A1_XDFIMFT)
+
+				cDia := substr(dtos(SC2->C2_DATPROG),7,2)
+					Loop
+			Endif
+
+
+	oSayTSel:SetText(nQtdSel)//Totalizar
+	nQtdSdo:= nQtdSdo -  aPColeta[nLin,7]
+	oSayQtd:SetText(nQtdSdo)//Totalizar
+ACTIVATE MSDIALOG oDlg1 CENTERED
+
+Return
+
+
+//<----------------------------------------------------------------------------------------------------------->
+Static Function fCadCol()
+cMostra:= ''
+	fSalvCol()
+Else
+	If aPColeta[nIt,01] == .T.
+		//Incluir
+		lMsErroAuto := .F.
+		lMsHelpAuto := .F.
+		DBSetOrder(1)
+		RecLock("ZZC",.T.)
+		ZZC->ZZC_FILIAL	:= xFilial()
+		ZZC->ZZC_STATUS	:= "1"
+	Else	
+		Processa({|| fQuery() },"Selecionando Registros","Aguarde....",.T.)
+Endif
+RestArea(aSA4)
+
+
+//<----------------------------------------------------------------------------------------------------------->
+Static Function fSelectAll()
+	cQuery += "			 AND ZZC.ZZC_FILIAL = '"+xFilial("ZZC")+"' "
+	
+	If cTpEmail == 'TRANSP'
+cHtml  += '<td width="10%" class="formulario">Peso Bruto</td>            '
+cHtml  += '</tr> '
+												 
+dbSelectAREA("XZZC")
+		dDatPrev := (XZZC->ZZC_DTPREV)
+		X:= 1
+	Endif
+	
+	IncProc()
+	
+	nTValor +=XZZC->VALOR
+	nTPesoBr += XZZC->PESO_BRU
+	nTPesoLq += XZZC->PESO_LIQ
+	nTPedido ++
+
+	cHtml  += '<td class="formulario2">'+ XZZC->ZZC_PEDIDO +'</td>          '
+	cHtml  += '<td class="formulario2">'+ XZZC->A1_NOME +'</td>          '
+	If Len(Alltrim(XZZC->A1_CGC)) = 14 //pj
+		cHtml  += '<td  class="formulario2">CNPJ: '+Transform(XZZC->A1_CGC,"@R 99.999.999/9999-99")+'.</td>    '
+	Else //pf
+		cHtml  += '<td  class="formulario2">CPF: '+Transform(XZZC->A1_CGC,"@R 999.999.999-99")+'.</td>   '
+	cHtml  += '<td class="formulario2" align="right">'+Transform(XZZC->PESO_LIQ,"@E 999,999,999.99")+' </td>            '
+	cHtml  += '<td class="formulario2" align="right">'+Transform(XZZC->VALOR,"@E 999,999,999.99")+' </td>            '
+	cHtml  += '<td class="formulario2" >'+Transform(XZZC->C5_CEPENT,"@R 99999-999")+' </td>            '
+	cHtml  += '<td class="formulario2" >'+Alltrim(XZZC->C5_BAIRENT)+' </td>            '
+	cHtml  += '<td class="formulario2" >'+Alltrim(XZZC->C5_CIDENTR)+'/'+Alltrim(XZZC->C5_ESTENT)+' </td>            '
+	cHtml  += '<td class="formulario2" >'+ ctpFrete+' </td>            '
+	cHtml  += '<td class="formulario2" >'+Alltrim(XZZC->C5_OBSPED2)+' </td>            '
+
+	//	cHtml  += '	</tr>          <tr> '
+	cHtml  += '	</tr> '
+	cHtml  += '<tr> <td class="formulario2">CEP 57081-003</td> </tr>'
+	cHtml  += '<tr> <td>&nbsp;</td></tr>'
+Endif	
+
+cHtml  += '<td class="formulario2">Atenciosamente,</td>  </tr>  <tr>    '
+If SM0->M0_CODIGO = '01'//SP
+	cHtml  += '<td class="formulario2">Fones:(11) 4443-1407 / 4443-1416</td>      '
+	cHtml  += '<td class="formulario2">Fones:(82) 2121-4926 / 2121-4922</td>      '
+	
+fSendMail(cTo,cBcc,cCC,cSubject,cHtml,.t.)
+
+
+Static Function fSendMail(cTo,cBcc,cCC,cSubject,cHtml,lMens)
+Local cFrom         := GetMv("MV_RELACNT")//'protheus@ibratin.com.br'
+	cServer   := 'email-ssl.com.br:587'
+Endif
+		Help("",1,"AVG0001056",,"Error: "+cErrorMsg,2,0)
+		Get Mail Error cErrorMsg
+
+// ColetaMateriais.tlpp - TLPP/Node.js
+// Rotina completa de coleta de materiais, 100% TLPP/Node.js, sem nenhum bloco AdvPL.
+
+@Rest
+class ColetaMateriais {
+	// 1. Consulta e montagem dos dados (simula tela de seleção)
+	@Get("/coleta-materiais")
+	action listarMateriais(params) {
+		// Consulta SQL com todos os filtros, joins, agrupamentos
+		// Parâmetros: transportadora, dataDe, dataAte, tipoFrete
+		const { transportadora, dataDe, dataAte, tipoFrete } = params;
+		let query = `
+			SELECT C5.C5_TRANSP, C5.C5_TPFRETE, A4.A4_NOME, C6.C6_NUM, C6.C6_ITEM, C6.C6_PRODUTO, C6.C6_LOCAL, B1.B1_DESC,
+				(C6.C6_QTDVEN - C6.C6_QTDENT) AS SALDO, C5.C5_CLIENTE, A1.A1_NOME, A1.A1_XDINIFT, A1.A1_XDFIMFT,
+				(C6.C6_QTDVEN - C6.C6_QTDENT) * C6.C6_PRCVEN AS C6_PRCVEN,
+				(C6.C6_QTDVEN - C6.C6_QTDENT) * B1.B1_PESOBRU AS PESO,
+				(C6.C6_QTDVEN - C6.C6_QTDENT) * B1.B1_PESO AS PESO_LIQ,
+				A4.A4_EMAIL, C5.C5_VEND1, B1.B1_PESO AS PLIQUID, A3.A3_EMAIL, C6.C6_ENTREG, C6.C6_QTDVEN, C6.C6_QTDENT, B1.B1_PESOBRU AS PBRUTO, C6.C6_PRCVEN AS PVENDA
+			FROM SC6 C6
+			INNER JOIN SB1 B1 ON C6.C6_PRODUTO = B1.B1_COD
+			INNER JOIN SC5 C5 ON C6.C6_NUM = C5.C5_NUM
+			INNER JOIN SA1 A1 ON C5.C5_CLIENTE = A1.A1_COD AND C5.C5_LOJACLI = A1.A1_LOJA
+			INNER JOIN SA4 A4 ON C5.C5_TRANSP = A4.A4_COD
+			INNER JOIN SA3 A3 ON C5.C5_VEND1 = A3.A3_COD
+			WHERE
+				C6.C6_ENTREG >= '${dataDe}' AND
+				C6.C6_ENTREG <= '${dataAte}' AND
+				C6.C6_QTDVEN > C6.C6_QTDENT AND
+				C5.D_E_L_E_T_ = '' AND C6.D_E_L_E_T_ = '' AND B1.D_E_L_E_T_ = '' AND A1.D_E_L_E_T_ = '' AND A4.D_E_L_E_T_ = '' AND A3.D_E_L_E_T_ = ''
+				${transportadora ? `AND C5.C5_TRANSP = '${transportadora}'` : ''}
+				${tipoFrete && tipoFrete !== 'A' ? `AND C5.C5_TPFRETE = '${tipoFrete}'` : ''}
+			ORDER BY C5.C5_TRANSP, C6.C6_NUM, C6.C6_ITEM, C6.C6_PRODUTO, B1.B1_DESC
+		`;
+		// Executa a query (ajuste para seu ORM ou driver)
+		const materiais = QuerySql(query);
+		return materiais;
+	}
+
+	// 2. Seleção/Edição de itens (simula grid, edição de quantidade, validações)
+	@Post("/coleta-materiais/selecionar")
+	action selecionarMateriais(body) {
+		// Recebe seleção/edição do usuário
+		// Valida quantidade, saldo, transportadora única, etc
+		// Atualiza array de seleção
+	}
+
+	// 3. Validação dos campos obrigatórios (contato, data prevista, etc)
+	function validaCampos(body) {
+		// ...
+	}
+
+	// 4. Atualização dos registros de coleta (transação, lock, unlock, update)
+	@Post("/coleta-materiais/salvar")
+	action salvarColeta(body) {
+		// Valida campos obrigatórios
+		// Atualiza registros (transação)
+		// Gera Excel
+		// Envia e-mail
+		// Retorna status
+	}
+
+	// 5. Geração de Excel (SheetJS)
+	function exportaExcel(materiais, totais) {
+		// ...
+	}
+
+	// 6. Geração e envio de e-mail (nodemailer)
+	function enviaEmailColeta(materiais, totais) {
+		// ...
+	}
+
+	// 7. Geração do HTML do e-mail (igual ao AdvPL)
+	function geraHtmlEmail(materiais, totais) {
+		// ...
+	}
+
+	// 8. Cálculo dos totais (itens, saldo, peso, valor)
+	function calculaTotais(materiais) {
+		// ...
+	}
+
+	// 9. Agrupamentos, estatísticas, regras de negócio
+	// ...
+}
+cQuery += "			 C5.D_E_L_E_T_ = '' AND "
