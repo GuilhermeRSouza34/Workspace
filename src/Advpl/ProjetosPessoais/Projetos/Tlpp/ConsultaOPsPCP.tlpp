@@ -185,7 +185,7 @@ class ConsultaOPsPCP {
         }
     }
 
-    // Detalhamento de uma OP
+    // Detalhamento de uma OP com integração de estoque, compras e vendas
     @Get("/consulta-ops-pcp/detalhe/:op")
     action detalheOP(params) {
         const { op } = params;
@@ -199,7 +199,20 @@ class ConsultaOPsPCP {
             `;
             const dados = QuerySql(query);
             if (!dados || dados.length === 0) return { sucesso: false, erro: 'OP não encontrada.' };
-            return { sucesso: true, op: dados[0] };
+            let opData = dados[0];
+            // Estoque do produto (SB2)
+            let estoque = QuerySql(`SELECT B2_LOCAL, B2_QATU FROM SB2 WHERE B2_COD = '${opData.C7_PRODUTO}' AND D_E_L_E_T_ = ''`);
+            // Compras relacionadas (SC1 - pedidos de compra do produto)
+            let compras = QuerySql(`SELECT C1_NUM, C1_FORNECE, C1_QUANT, C1_EMISSAO, C1_PRECO FROM SC1 WHERE C1_PRODUTO = '${opData.C7_PRODUTO}' AND D_E_L_E_T_ = '' ORDER BY C1_EMISSAO DESC OFFSET 0 ROWS FETCH NEXT 5 ROWS ONLY`);
+            // Vendas relacionadas (SA1/SD1 - pedidos de venda do produto)
+            let vendas = QuerySql(`SELECT D1_DOC, D1_CLIENTE, D1_QUANT, D1_EMISSAO, D1_PRCVEN FROM SD1 WHERE D1_COD = '${opData.C7_PRODUTO}' AND D_E_L_E_T_ = '' ORDER BY D1_EMISSAO DESC OFFSET 0 ROWS FETCH NEXT 5 ROWS ONLY`);
+            return {
+                sucesso: true,
+                op: opData,
+                estoque,
+                compras,
+                vendas
+            };
         } catch (e) {
             this.logErro('detalheOP', e.message, params);
             return { sucesso: false, erro: e.message };
