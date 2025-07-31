@@ -1,4 +1,4 @@
-    // Upload de anexo para uma OP
+// Upload de anexo para uma OP
     @Post("/consulta-ops-pcp/anexar/:op")
     action anexarArquivo(params, req) {
         const { op } = params;
@@ -13,6 +13,7 @@
             const filePath = path.join(dir, req.file.originalname);
             fs.writeFileSync(filePath, req.file.buffer);
             this.registraAnexoOP(op, req.file.originalname, filePath);
+            this.registraAuditoria('anexarArquivo', req.usuario || 'desconhecido', { op, arquivo: req.file.originalname }, op, req.ip || null);
             return { sucesso: true, mensagem: 'Arquivo anexado com sucesso.', arquivo: req.file.originalname };
         } catch (e) {
             this.logErro('anexarArquivo', e.message, { op });
@@ -31,6 +32,7 @@
             if (!fs.existsSync(file)) return { sucesso: true, anexos: [] };
             const all = JSON.parse(fs.readFileSync(file, 'utf8'));
             const anexos = all.filter(a => a.op == op);
+            this.registraAuditoria('listarAnexos', params.usuario || 'desconhecido', { op }, op, params.ip || null);
             return { sucesso: true, anexos };
         } catch (e) {
             this.logErro('listarAnexosOP', e.message, params);
@@ -50,10 +52,13 @@
             if (!fs.existsSync(filePath)) return { sucesso: false, erro: 'Arquivo não encontrado.' };
             // Para frameworks que suportam res.download ou res.sendFile
             if (res && res.download) {
+                this.registraAuditoria('downloadAnexo', params.usuario || 'desconhecido', { op, arquivo }, op, params.ip || null);
                 return res.download(filePath);
             } else if (res && res.sendFile) {
+                this.registraAuditoria('downloadAnexo', params.usuario || 'desconhecido', { op, arquivo }, op, params.ip || null);
                 return res.sendFile(filePath);
             } else {
+                this.registraAuditoria('downloadAnexo', params.usuario || 'desconhecido', { op, arquivo }, op, params.ip || null);
                 // Alternativa: retorna o buffer base64
                 const buffer = fs.readFileSync(filePath);
                 return { sucesso: true, arquivo, conteudo: buffer.toString('base64') };
@@ -147,6 +152,7 @@ class ConsultaOPsPCP {
             const ops = QuerySql(query);
             const total = QuerySql(countQuery)[0]?.total || 0;
             this.logConsulta(params, ops.length);
+            this.registraAuditoria('consultaOPs', params.usuario || 'desconhecido', params, null, params.ip || null);
             return { sucesso: true, total, page, pageSize, dados: ops };
         } catch (e) {
             this.logErro('consultaOPs', e.message, params);
@@ -178,6 +184,7 @@ class ConsultaOPsPCP {
                 XLSX.writeFile(wb, filePath);
             }
             this.logExportacao(ops.length, formato);
+            this.registraAuditoria('exportaOPs', body.usuario || 'desconhecido', { formato, qtd: ops.length }, null, body.ip || null);
             return { sucesso: true, arquivo: filePath };
         } catch (e) {
             this.logErro('exportaOPs', e.message, body);
@@ -235,6 +242,7 @@ class ConsultaOPsPCP {
             let result = ExecSql(update);
             this.logReprocessamento(op, novoStatus);
             this.registraHistoricoAlteracao(op, 'C7_SITUAC', statusAnt, novoStatus, usuario);
+            this.registraAuditoria('reprocessaOP', usuario, { op, de: statusAnt, para: novoStatus }, op, body.ip || null);
             // Envia e-mail de notificação
             let destinatario = emailDestino || this.getEmailPadrao();
             this.enviaEmailNotificacao({
@@ -347,5 +355,45 @@ class ConsultaOPsPCP {
         const fs = require('fs');
         const log = `[${new Date().toISOString()}] ERRO em ${func}: ${erro} | Params: ${JSON.stringify(params)}\n`;
         fs.appendFileSync('./log_erro_ops.txt', log);
+    }
+
+    // Auditoria: registra toda ação relevante
+    registraAuditoria(operacao, usuario, detalhes, op = null, ip = null) {
+        const fs = require('fs');
+        const file = './auditoria_ops.json';
+        let all = [];
+        if (fs.existsSync(file)) {
+            try { all = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { all = []; }
+        }
+        all.push({
+            data: new Date().toISOString(),
+            operacao,
+            usuario,
+            detalhes,
+            op,
+            ip
+        });
+        fs.writeFileSync(file, JSON.stringify(all, null, 2));
+    }
+
+    // Endpoint para consultar auditoria
+    @Get("/consulta-ops-pcp/auditoria")
+    action consultaAuditoria(params) {
+        const { usuario, operacao, op, dataDe, dataAte } = params;
+        try {
+            const fs = require('fs');
+            const file = './auditoria_ops.json';
+            if (!fs.existsSync(file)) return { sucesso: true, auditoria: [] };
+            let all = JSON.parse(fs.readFileSync(file, 'utf8'));
+            if (usuario) all = all.filter(a => a.usuario == usuario);
+            if (operacao) all = all.filter(a => a.operacao == operacao);
+            if (op) all = all.filter(a => a.op == op);
+            if (dataDe) all = all.filter(a => a.data >= dataDe);
+            if (dataAte) all = all.filter(a => a.data <= dataAte);
+            return { sucesso: true, auditoria: all };
+        } catch (e) {
+            this.logErro('consultaAuditoria', e.message, params);
+            return { sucesso: false, erro: e.message };
+        }
     }
 }
