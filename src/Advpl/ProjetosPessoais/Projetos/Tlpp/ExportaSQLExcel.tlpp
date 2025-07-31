@@ -1,0 +1,27 @@
+// ExportaSQLExcel.tlpp
+// Rotina TLPP para exportação de qualquer consulta SQL para Excel
+
+@Rest
+class ExportaSQLExcel {
+    @Post("/exporta-sql-excel")
+    action exportaSqlExcel(body) {
+        // Recebe a query SQL no body
+        const { query } = body;
+        if (!query) {
+            return { erro: 'Query SQL não informada.' };
+        }
+        // Executa a query
+        const resultado = QuerySql(query);
+        if (!resultado || resultado.length === 0) {
+            return { erro: 'Nenhum dado retornado pela consulta.' };
+        }
+        // Gera o Excel
+        const XLSX = require('xlsx');
+        const ws = XLSX.utils.json_to_sheet(resultado);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'ResultadoSQL');
+        const filePath = './ExportaSQL_' + (new Date().toISOString().slice(0,10)) + '.xlsx';
+        XLSX.writeFile(wb, filePath);
+        return { sucesso: true, arquivo: filePath };
+    }
+}
