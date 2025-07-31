@@ -90,20 +90,61 @@ class ConsultaOPsPCP {
         }
     }
 
-    // Atualização/Reprocessamento de status de OP
+    // Atualização/Reprocessamento de status de OP com registro de histórico
     @Post("/consulta-ops-pcp/reprocessa")
     action reprocessaOP(body) {
-        const { op, novoStatus } = body;
+        const { op, novoStatus, usuario = 'sistema' } = body;
         if (!op || !novoStatus) return { sucesso: false, erro: 'Informe OP e novo status.' };
         try {
+            // Busca status anterior
+            let old = QuerySql(`SELECT C7_SITUAC FROM SC7 WHERE C7_OP = '${op}' AND D_E_L_E_T_ = ''`);
+            let statusAnt = old && old[0] ? old[0].C7_SITUAC : '';
             let update = `UPDATE SC7 SET C7_SITUAC = '${novoStatus}' WHERE C7_OP = '${op}' AND D_E_L_E_T_ = ''`;
             let result = ExecSql(update);
             this.logReprocessamento(op, novoStatus);
+            this.registraHistoricoAlteracao(op, 'C7_SITUAC', statusAnt, novoStatus, usuario);
             return { sucesso: true, mensagem: 'Status atualizado com sucesso.' };
         } catch (e) {
             this.logErro('reprocessaOP', e.message, body);
             return { sucesso: false, erro: e.message };
         }
+    }
+
+    // Endpoint para consultar histórico de alterações de uma OP
+    @Get("/consulta-ops-pcp/historico/:op")
+    action historicoOP(params) {
+        const { op } = params;
+        if (!op) return { sucesso: false, erro: 'Informe o número da OP.' };
+        try {
+            const fs = require('fs');
+            const file = './historico_ops.json';
+            if (!fs.existsSync(file)) return { sucesso: true, historico: [] };
+            const all = JSON.parse(fs.readFileSync(file, 'utf8'));
+            const hist = all.filter(h => h.op == op);
+            return { sucesso: true, historico: hist };
+        } catch (e) {
+            this.logErro('historicoOP', e.message, params);
+            return { sucesso: false, erro: e.message };
+        }
+    }
+
+    // Função auxiliar: registra histórico de alteração
+    registraHistoricoAlteracao(op, campo, de, para, usuario) {
+        const fs = require('fs');
+        const file = './historico_ops.json';
+        let all = [];
+        if (fs.existsSync(file)) {
+            try { all = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { all = []; }
+        }
+        all.push({
+            op,
+            campo,
+            de,
+            para,
+            usuario,
+            data: new Date().toISOString()
+        });
+        fs.writeFileSync(file, JSON.stringify(all, null, 2));
     }
 
     // Função auxiliar: log de consultas
