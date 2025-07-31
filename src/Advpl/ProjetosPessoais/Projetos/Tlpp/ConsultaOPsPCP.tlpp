@@ -1,3 +1,37 @@
+    // Dashboard/resumo estatístico das OPs
+    @Get("/consulta-ops-pcp/dashboard")
+    action dashboardOPs(params) {
+        try {
+            // Total de OPs
+            let total = QuerySql("SELECT COUNT(*) as total FROM SC7 WHERE D_E_L_E_T_ = ''")[0]?.total || 0;
+            // Por status
+            let porStatus = QuerySql("SELECT C7_SITUAC as status, COUNT(*) as qtd FROM SC7 WHERE D_E_L_E_T_ = '' GROUP BY C7_SITUAC");
+            // Por produto (top 5)
+            let porProduto = QuerySql("SELECT C7_PRODUTO as produto, COUNT(*) as qtd FROM SC7 WHERE D_E_L_E_T_ = '' GROUP BY C7_PRODUTO ORDER BY qtd DESC OFFSET 0 ROWS FETCH NEXT 5 ROWS ONLY");
+            // Por cliente (top 5)
+            let porCliente = QuerySql("SELECT C7_CLIENTE as cliente, COUNT(*) as qtd FROM SC7 WHERE D_E_L_E_T_ = '' GROUP BY C7_CLIENTE ORDER BY qtd DESC OFFSET 0 ROWS FETCH NEXT 5 ROWS ONLY");
+            // OPs atrasadas (data prevista < hoje e não finalizadas)
+            let hoje = (new Date()).toISOString().slice(0,10);
+            let atrasadas = QuerySql(`SELECT COUNT(*) as qtd FROM SC7 WHERE D_E_L_E_T_ = '' AND C7_DATPRF < '${hoje}' AND C7_SITUAC NOT IN ('F','C')`)[0]?.qtd || 0;
+            // OPs próximas do vencimento (data prevista nos próximos 7 dias)
+            let prox7 = new Date();
+            prox7.setDate(prox7.getDate() + 7);
+            let dataLimite = prox7.toISOString().slice(0,10);
+            let proximas = QuerySql(`SELECT COUNT(*) as qtd FROM SC7 WHERE D_E_L_E_T_ = '' AND C7_DATPRF >= '${hoje}' AND C7_DATPRF <= '${dataLimite}' AND C7_SITUAC NOT IN ('F','C')`)[0]?.qtd || 0;
+            return {
+                sucesso: true,
+                total,
+                porStatus,
+                porProduto,
+                porCliente,
+                atrasadas,
+                proximasVencer: proximas
+            };
+        } catch (e) {
+            this.logErro('dashboardOPs', e.message, params);
+            return { sucesso: false, erro: e.message };
+        }
+    }
 // ConsultaOPsPCP.tlpp
 // Sistema robusto de consulta, exportação e gestão de Ordens de Produção do SIGAPCP
 
