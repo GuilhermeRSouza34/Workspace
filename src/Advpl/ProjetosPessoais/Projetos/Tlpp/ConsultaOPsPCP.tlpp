@@ -1,3 +1,85 @@
+    // Upload de anexo para uma OP
+    @Post("/consulta-ops-pcp/anexar/:op")
+    action anexarArquivo(params, req) {
+        const { op } = params;
+        if (!op) return { sucesso: false, erro: 'Informe o número da OP.' };
+        try {
+            // Suporte a multipart/form-data (req.file)
+            const fs = require('fs');
+            const path = require('path');
+            if (!req.file || !req.file.originalname) return { sucesso: false, erro: 'Arquivo não enviado.' };
+            const dir = path.join('./anexos_ops', op);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            const filePath = path.join(dir, req.file.originalname);
+            fs.writeFileSync(filePath, req.file.buffer);
+            this.registraAnexoOP(op, req.file.originalname, filePath);
+            return { sucesso: true, mensagem: 'Arquivo anexado com sucesso.', arquivo: req.file.originalname };
+        } catch (e) {
+            this.logErro('anexarArquivo', e.message, { op });
+            return { sucesso: false, erro: e.message };
+        }
+    }
+
+    // Listar anexos de uma OP
+    @Get("/consulta-ops-pcp/anexos/:op")
+    action listarAnexosOP(params) {
+        const { op } = params;
+        if (!op) return { sucesso: false, erro: 'Informe o número da OP.' };
+        try {
+            const fs = require('fs');
+            const file = './anexos_ops.json';
+            if (!fs.existsSync(file)) return { sucesso: true, anexos: [] };
+            const all = JSON.parse(fs.readFileSync(file, 'utf8'));
+            const anexos = all.filter(a => a.op == op);
+            return { sucesso: true, anexos };
+        } catch (e) {
+            this.logErro('listarAnexosOP', e.message, params);
+            return { sucesso: false, erro: e.message };
+        }
+    }
+
+    // Download de anexo de uma OP
+    @Get("/consulta-ops-pcp/download-anexo/:op/:arquivo")
+    action downloadAnexoOP(params, res) {
+        const { op, arquivo } = params;
+        if (!op || !arquivo) return { sucesso: false, erro: 'Informe OP e arquivo.' };
+        try {
+            const path = require('path');
+            const fs = require('fs');
+            const filePath = path.join('./anexos_ops', op, arquivo);
+            if (!fs.existsSync(filePath)) return { sucesso: false, erro: 'Arquivo não encontrado.' };
+            // Para frameworks que suportam res.download ou res.sendFile
+            if (res && res.download) {
+                return res.download(filePath);
+            } else if (res && res.sendFile) {
+                return res.sendFile(filePath);
+            } else {
+                // Alternativa: retorna o buffer base64
+                const buffer = fs.readFileSync(filePath);
+                return { sucesso: true, arquivo, conteudo: buffer.toString('base64') };
+            }
+        } catch (e) {
+            this.logErro('downloadAnexoOP', e.message, params);
+            return { sucesso: false, erro: e.message };
+        }
+    }
+
+    // Função auxiliar: registra metadados de anexo
+    registraAnexoOP(op, nome, caminho) {
+        const fs = require('fs');
+        const file = './anexos_ops.json';
+        let all = [];
+        if (fs.existsSync(file)) {
+            try { all = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { all = []; }
+        }
+        all.push({
+            op,
+            nome,
+            caminho,
+            data: new Date().toISOString()
+        });
+        fs.writeFileSync(file, JSON.stringify(all, null, 2));
+    }
     // Dashboard/resumo estatístico das OPs
     @Get("/consulta-ops-pcp/dashboard")
     action dashboardOPs(params) {
