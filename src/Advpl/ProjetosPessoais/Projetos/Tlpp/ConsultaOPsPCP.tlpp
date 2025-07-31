@@ -1,39 +1,136 @@
 // ConsultaOPsPCP.tlpp
-// Consulta e exportação de Ordens de Produção do SIGAPCP
+// Sistema robusto de consulta, exportação e gestão de Ordens de Produção do SIGAPCP
 
 @Rest
 class ConsultaOPsPCP {
+    // Consulta avançada de OPs com filtros, paginação e ordenação
     @Get("/consulta-ops-pcp")
     action consultaOPs(params) {
-        // Parâmetros: produto, status, dataDe, dataAte
-        const { produto, status, dataDe, dataAte } = params;
+        // Parâmetros: produto, status, dataDe, dataAte, cliente, op, local, page, pageSize, orderBy, orderDir
+        const { produto, status, dataDe, dataAte, cliente, op, local, page = 1, pageSize = 50, orderBy = 'C7_NUM', orderDir = 'DESC' } = params;
+        let where = ["C7.D_E_L_E_T_ = ''"];
+        if (produto) where.push(`C7_PRODUTO = '${produto}'`);
+        if (status) where.push(`C7_SITUAC = '${status}'`);
+        if (dataDe) where.push(`C7_EMISSAO >= '${dataDe}'`);
+        if (dataAte) where.push(`C7_EMISSAO <= '${dataAte}'`);
+        if (cliente) where.push(`C7_CLIENTE = '${cliente}'`);
+        if (op) where.push(`C7_OP = '${op}'`);
+        if (local) where.push(`C7_LOCAL = '${local}'`);
+        let whereStr = where.length ? 'WHERE ' + where.join(' AND ') : '';
+        let offset = (parseInt(page) - 1) * parseInt(pageSize);
         let query = `
-            SELECT C7_NUM, C7_PRODUTO, B1_DESC, C7_QUANT, C7_QUJE, C7_DATPRF, C7_DATRF, C7_SITUAC, C7_LOCAL, C7_OP, C7_EMISSAO
+            SELECT C7_NUM, C7_PRODUTO, B1_DESC, C7_QUANT, C7_QUJE, C7_DATPRF, C7_DATRF, C7_SITUAC, C7_LOCAL, C7_OP, C7_EMISSAO, C7_CLIENTE
             FROM SC7
             INNER JOIN SB1 ON C7_PRODUTO = B1_COD
-            WHERE C7.D_E_L_E_T_ = ''
-                ${produto ? `AND C7_PRODUTO = '${produto}'` : ''}
-                ${status ? `AND C7_SITUAC = '${status}'` : ''}
-                ${dataDe ? `AND C7_EMISSAO >= '${dataDe}'` : ''}
-                ${dataAte ? `AND C7_EMISSAO <= '${dataAte}'` : ''}
-            ORDER BY C7_NUM DESC
+            ${whereStr}
+            ORDER BY ${orderBy} ${orderDir}
+            OFFSET ${offset} ROWS FETCH NEXT ${pageSize} ROWS ONLY
         `;
-        const ops = QuerySql(query);
-        return ops;
+        let countQuery = `SELECT COUNT(*) as total FROM SC7 INNER JOIN SB1 ON C7_PRODUTO = B1_COD ${whereStr}`;
+        try {
+            const ops = QuerySql(query);
+            const total = QuerySql(countQuery)[0]?.total || 0;
+            this.logConsulta(params, ops.length);
+            return { sucesso: true, total, page, pageSize, dados: ops };
+        } catch (e) {
+            this.logErro('consultaOPs', e.message, params);
+            return { sucesso: false, erro: e.message };
+        }
     }
 
+    // Exportação para Excel ou CSV
     @Post("/consulta-ops-pcp/exporta")
-    action exportaOPsExcel(body) {
-        const { ops } = body;
-        if (!ops || ops.length === 0) {
-            return { erro: 'Nenhuma OP para exportar.' };
+    action exportaOPs(body) {
+        const { ops, formato = 'xlsx' } = body;
+        if (!ops || !Array.isArray(ops) || ops.length === 0) {
+            return { sucesso: false, erro: 'Nenhuma OP para exportar.' };
         }
-        const XLSX = require('xlsx');
-        const ws = XLSX.utils.json_to_sheet(ops);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'OPsPCP');
-        const filePath = './OPsPCP_' + (new Date().toISOString().slice(0,10)) + '.xlsx';
-        XLSX.writeFile(wb, filePath);
-        return { sucesso: true, arquivo: filePath };
+        try {
+            let filePath = '';
+            if (formato === 'csv') {
+                const fs = require('fs');
+                const fields = Object.keys(ops[0]);
+                const csv = [fields.join(';')].concat(ops.map(row => fields.map(f => row[f]).join(';'))).join('\n');
+                filePath = './OPsPCP_' + (new Date().toISOString().slice(0,10)) + '.csv';
+                fs.writeFileSync(filePath, csv);
+            } else {
+                const XLSX = require('xlsx');
+                const ws = XLSX.utils.json_to_sheet(ops);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'OPsPCP');
+                filePath = './OPsPCP_' + (new Date().toISOString().slice(0,10)) + '.xlsx';
+                XLSX.writeFile(wb, filePath);
+            }
+            this.logExportacao(ops.length, formato);
+            return { sucesso: true, arquivo: filePath };
+        } catch (e) {
+            this.logErro('exportaOPs', e.message, body);
+            return { sucesso: false, erro: e.message };
+        }
+    }
+
+    // Detalhamento de uma OP
+    @Get("/consulta-ops-pcp/detalhe/:op")
+    action detalheOP(params) {
+        const { op } = params;
+        if (!op) return { sucesso: false, erro: 'Informe o número da OP.' };
+        try {
+            let query = `
+                SELECT C7_NUM, C7_PRODUTO, B1_DESC, C7_QUANT, C7_QUJE, C7_DATPRF, C7_DATRF, C7_SITUAC, C7_LOCAL, C7_OP, C7_EMISSAO, C7_CLIENTE, C7_OBS
+                FROM SC7
+                INNER JOIN SB1 ON C7_PRODUTO = B1_COD
+                WHERE C7.D_E_L_E_T_ = '' AND C7_OP = '${op}'
+            `;
+            const dados = QuerySql(query);
+            if (!dados || dados.length === 0) return { sucesso: false, erro: 'OP não encontrada.' };
+            return { sucesso: true, op: dados[0] };
+        } catch (e) {
+            this.logErro('detalheOP', e.message, params);
+            return { sucesso: false, erro: e.message };
+        }
+    }
+
+    // Atualização/Reprocessamento de status de OP
+    @Post("/consulta-ops-pcp/reprocessa")
+    action reprocessaOP(body) {
+        const { op, novoStatus } = body;
+        if (!op || !novoStatus) return { sucesso: false, erro: 'Informe OP e novo status.' };
+        try {
+            let update = `UPDATE SC7 SET C7_SITUAC = '${novoStatus}' WHERE C7_OP = '${op}' AND D_E_L_E_T_ = ''`;
+            let result = ExecSql(update);
+            this.logReprocessamento(op, novoStatus);
+            return { sucesso: true, mensagem: 'Status atualizado com sucesso.' };
+        } catch (e) {
+            this.logErro('reprocessaOP', e.message, body);
+            return { sucesso: false, erro: e.message };
+        }
+    }
+
+    // Função auxiliar: log de consultas
+    logConsulta(params, qtd) {
+        const fs = require('fs');
+        const log = `[${new Date().toISOString()}] Consulta: ${JSON.stringify(params)} - Resultados: ${qtd}\n`;
+        fs.appendFileSync('./log_consulta_ops.txt', log);
+    }
+
+    // Função auxiliar: log de exportações
+    logExportacao(qtd, formato) {
+        const fs = require('fs');
+        const log = `[${new Date().toISOString()}] Exportação: ${qtd} registros, formato: ${formato}\n`;
+        fs.appendFileSync('./log_exporta_ops.txt', log);
+    }
+
+    // Função auxiliar: log de reprocessamento
+    logReprocessamento(op, status) {
+        const fs = require('fs');
+        const log = `[${new Date().toISOString()}] Reprocessamento OP: ${op}, novo status: ${status}\n`;
+        fs.appendFileSync('./log_reprocessa_ops.txt', log);
+    }
+
+    // Função auxiliar: log de erros
+    logErro(func, erro, params) {
+        const fs = require('fs');
+        const log = `[${new Date().toISOString()}] ERRO em ${func}: ${erro} | Params: ${JSON.stringify(params)}\n`;
+        fs.appendFileSync('./log_erro_ops.txt', log);
     }
 }
