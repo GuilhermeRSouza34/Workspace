@@ -90,23 +90,68 @@ class ConsultaOPsPCP {
         }
     }
 
-    // Atualização/Reprocessamento de status de OP com registro de histórico
+    // Atualização/Reprocessamento de status de OP com registro de histórico e notificação por e-mail
     @Post("/consulta-ops-pcp/reprocessa")
     action reprocessaOP(body) {
-        const { op, novoStatus, usuario = 'sistema' } = body;
+        const { op, novoStatus, usuario = 'sistema', emailDestino } = body;
         if (!op || !novoStatus) return { sucesso: false, erro: 'Informe OP e novo status.' };
         try {
             // Busca status anterior
-            let old = QuerySql(`SELECT C7_SITUAC FROM SC7 WHERE C7_OP = '${op}' AND D_E_L_E_T_ = ''`);
+            let old = QuerySql(`SELECT C7_SITUAC, C7_PRODUTO, C7_CLIENTE, C7_QUANT FROM SC7 WHERE C7_OP = '${op}' AND D_E_L_E_T_ = ''`);
             let statusAnt = old && old[0] ? old[0].C7_SITUAC : '';
+            let produto = old && old[0] ? old[0].C7_PRODUTO : '';
+            let cliente = old && old[0] ? old[0].C7_CLIENTE : '';
+            let quant = old && old[0] ? old[0].C7_QUANT : '';
             let update = `UPDATE SC7 SET C7_SITUAC = '${novoStatus}' WHERE C7_OP = '${op}' AND D_E_L_E_T_ = ''`;
             let result = ExecSql(update);
             this.logReprocessamento(op, novoStatus);
             this.registraHistoricoAlteracao(op, 'C7_SITUAC', statusAnt, novoStatus, usuario);
-            return { sucesso: true, mensagem: 'Status atualizado com sucesso.' };
+            // Envia e-mail de notificação
+            let destinatario = emailDestino || this.getEmailPadrao();
+            this.enviaEmailNotificacao({
+                op, produto, cliente, quant, statusAnt, novoStatus, usuario, destinatario
+            });
+            return { sucesso: true, mensagem: 'Status atualizado com sucesso. Notificação enviada.' };
         } catch (e) {
             this.logErro('reprocessaOP', e.message, body);
             return { sucesso: false, erro: e.message };
+        }
+    }
+
+    // Função auxiliar: retorna e-mail padrão
+    getEmailPadrao() {
+        // Altere para o e-mail padrão desejado
+        return 'responsavel@empresa.com.br';
+    }
+
+    // Função auxiliar: envia e-mail de notificação
+    enviaEmailNotificacao({ op, produto, cliente, quant, statusAnt, novoStatus, usuario, destinatario }) {
+        try {
+            const nodemailer = require('nodemailer');
+            // Configure o transporte SMTP conforme seu ambiente
+            let transporter = nodemailer.createTransport({
+                host: 'smtp.seuservidor.com',
+                port: 587,
+                secure: false,
+                auth: {
+                    user: 'usuario@empresa.com.br',
+                    pass: 'senha'
+                }
+            });
+            let assunto = `OP ${op} alterada: ${statusAnt} ? ${novoStatus}`;
+            let corpo = `A OP ${op} foi alterada por ${usuario} em ${new Date().toLocaleString()}\n\n` +
+                `Produto: ${produto}\nCliente: ${cliente}\nQuantidade: ${quant}\n` +
+                `Status anterior: ${statusAnt}\nNovo status: ${novoStatus}`;
+            transporter.sendMail({
+                from: 'notificacoes@empresa.com.br',
+                to: destinatario,
+                subject: assunto,
+                text: corpo
+            }, (err, info) => {
+                if (err) this.logErro('enviaEmailNotificacao', err.message, { op, destinatario });
+            });
+        } catch (e) {
+            this.logErro('enviaEmailNotificacao', e.message, { op, destinatario });
         }
     }
 
