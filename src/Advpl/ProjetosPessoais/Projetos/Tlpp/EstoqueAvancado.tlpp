@@ -302,4 +302,152 @@ class EstoqueAvancado {
         Local cQuery := "SELECT B2_COD, B2_LOCAL, B2_QATU FROM SB2 WHERE D_E_L_E_T_ = '' AND B2_COD = '" + cProduto + "'"
         Local aDados := QuerySql(cQuery)
         Return { "sucesso" => .T., "dados" => aDados }
+
+    // =====================
+    // INTEGRAÇÃO COM COMPRAS E VENDAS
+    // =====================
+    @Get("/estoque/integracao/compras-vendas/:produto")
+    action integracaoComprasVendas(params)
+        Local cProduto := params["produto"], aCompras := {}, aVendas := {}, cQuery, aDados
+        // Compras nos últimos 6 meses
+        cQuery := "SELECT SUM(C6_QTDVEN) AS QTDCOMPRA FROM SC6 WHERE C6_PRODUTO = '" + cProduto + "' AND C6_EMISSAO >= '" + DToS(Date() - 180) + "' AND D_E_L_E_T_ = ''"
+        aDados := QuerySql(cQuery)
+        If !Empty(aDados)
+            aCompras := aDados[1]["QTDCOMPRA"]
+        EndIf
+        // Vendas nos últimos 6 meses
+        cQuery := "SELECT SUM(D2_QUANT) AS QTDVENDA FROM SD2 WHERE D2_COD = '" + cProduto + "' AND D2_EMISSAO >= '" + DToS(Date() - 180) + "' AND D_E_L_E_T_ = ''"
+        aDados := QuerySql(cQuery)
+        If !Empty(aDados)
+            aVendas := aDados[1]["QTDVENDA"]
+        EndIf
+        Return { "sucesso" => .T., "compras" => aCompras, "vendas" => aVendas }
+
+    // =====================
+    // WORKFLOW DE APROVAÇÃO DE MOVIMENTAÇÃO
+    // =====================
+    @Post("/estoque/workflow/solicitar")
+    action solicitarMovimentacao(body)
+        Local cProduto := body["produto"], cLocal := body["local"], nQtd := body["quantidade"], cTipo := body["tipo"], cUsuario := body["usuario"], cObs := body["obs"]
+        Local file := "./workflow_mov.json", fs, all
+        all := {}
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+        EndIf
+        aAdd(all, { "produto" => cProduto, "local" => cLocal, "quantidade" => nQtd, "tipo" => cTipo, "usuario" => cUsuario, "obs" => cObs, "status" => "PENDENTE", "data" => DToS(Date()) })
+        MemoWrite(file, JsonEncode(all))
+        Return { "sucesso" => .T., "mensagem" => "Solicitação registrada para aprovação." }
+
+    @Post("/estoque/workflow/aprovar")
+    action aprovarMovimentacao(body)
+        Local nIdx, file := "./workflow_mov.json", fs, all, lAchou := .F.
+        all := {}
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+        EndIf
+        For nIdx := 1 To Len(all)
+            If all[nIdx]["status"] == "PENDENTE"
+                all[nIdx]["status"] := "APROVADO"
+                // Executa movimentação real
+                This:movimentaEstoque({ "produto" => all[nIdx]["produto"], "local" => all[nIdx]["local"], "quantidade" => all[nIdx]["quantidade"], "tipo" => all[nIdx]["tipo"], "obs" => all[nIdx]["obs"] })
+                lAchou := .T.
+                Exit
+            EndIf
+        Next
+        MemoWrite(file, JsonEncode(all))
+        If lAchou
+            Return { "sucesso" => .T., "mensagem" => "Movimentação aprovada e executada." }
+        Else
+            Return { "sucesso" => .F., "erro" => "Nenhuma movimentação pendente encontrada." }
+        EndIf
+
+    @Get("/estoque/workflow/pendentes")
+    action listaPendentes(params)
+        Local file := "./workflow_mov.json", fs, all, aRet := {}
+        all := {}
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+        EndIf
+        ForEach a IN all
+            If a["status"] == "PENDENTE"
+                aAdd(aRet, a)
+            EndIf
+        Next
+        Return { "sucesso" => .T., "pendentes" => aRet }
+
+    // =====================
+    // ALERTAS AUTOMÁTICOS DE RUPTURA/EXCESSO
+    // =====================
+    @Get("/estoque/alertas")
+    action alertasEstoque(params)
+        Local aAlertas := {}, cQuery, aDados, nI
+        // Ruptura
+        cQuery := "SELECT B2_COD, B2_LOCAL, B2_QATU FROM SB2 WHERE D_E_L_E_T_ = '' AND B2_QATU <= 0"
+        aDados := QuerySql(cQuery)
+        For nI := 1 To Len(aDados)
+            aAdd(aAlertas, { "tipo" => "RUPTURA", "produto" => aDados[nI]["B2_COD"], "local" => aDados[nI]["B2_LOCAL"], "saldo" => aDados[nI]["B2_QATU"] })
+        Next
+        // Excesso
+        cQuery := "SELECT SB2.B2_COD, SB2.B2_LOCAL, SB2.B2_QATU, SB1.B1_ESTSEG FROM SB2 INNER JOIN SB1 ON SB2.B2_COD = SB1.B1_COD WHERE SB2.D_E_L_E_T_ = '' AND SB2.B2_QATU > SB1.B1_ESTSEG*2"
+        aDados := QuerySql(cQuery)
+        For nI := 1 To Len(aDados)
+            aAdd(aAlertas, { "tipo" => "EXCESSO", "produto" => aDados[nI]["B2_COD"], "local" => aDados[nI]["B2_LOCAL"], "saldo" => aDados[nI]["B2_QATU"] })
+        Next
+        Return { "sucesso" => .T., "alertas" => aAlertas }
+
+    // =====================
+    // ANÁLISE ABC DETALHADA
+    // =====================
+    @Get("/estoque/abc/detalhado")
+    action abcDetalhado(params)
+        Local cQuery, aDados, aRet := {}, nTotal := 0, nI, nPerc := 0
+        // Busca total de vendas
+        cQuery := "SELECT SUM(D2_TOTAL) AS TOTAL FROM SD2 WHERE D_E_L_E_T_ = ''"
+        aDados := QuerySql(cQuery)
+        If !Empty(aDados)
+            nTotal := aDados[1]["TOTAL"]
+        EndIf
+        // Busca vendas por produto
+        cQuery := "SELECT D2_COD, SUM(D2_TOTAL) AS VLR FROM SD2 WHERE D_E_L_E_T_ = '' GROUP BY D2_COD ORDER BY VLR DESC"
+        aDados := QuerySql(cQuery)
+        nPerc := 0
+        For nI := 1 To Len(aDados)
+            nPerc += (aDados[nI]["VLR"] / nTotal) * 100
+            aAdd(aRet, { "produto" => aDados[nI]["D2_COD"], "vendas" => aDados[nI]["VLR"], "perc_acumulado" => nPerc })
+        Next
+        Return { "sucesso" => .T., "abc" => aRet }
+
+    // =====================
+    // INTEGRAÇÃO COM INVENTÁRIO FÍSICO
+    // =====================
+    @Post("/estoque/inventario/registrar")
+    action registrarInventario(body)
+        Local cProduto := body["produto"], cLocal := body["local"], nQtdFisico := body["quantidade"], cUsuario := body["usuario"]
+        Local file := "./inventario_fisico.json", fs, all
+        all := {}
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+        EndIf
+        aAdd(all, { "produto" => cProduto, "local" => cLocal, "quantidade_fisico" => nQtdFisico, "usuario" => cUsuario, "data" => DToS(Date()) })
+        MemoWrite(file, JsonEncode(all))
+        Return { "sucesso" => .T., "mensagem" => "Inventário físico registrado." }
+
+    @Get("/estoque/inventario/:produto/:local")
+    action consultaInventario(params)
+        Local cProduto := params["produto"], cLocal := params["local"], file := "./inventario_fisico.json", fs, all, aRet := {}
+        all := {}
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+        EndIf
+        ForEach a IN all
+            If a["produto"] == cProduto .And. a["local"] == cLocal
+                aAdd(aRet, a)
+            EndIf
+        Next
+        Return { "sucesso" => .T., "inventario" => aRet }
 }
