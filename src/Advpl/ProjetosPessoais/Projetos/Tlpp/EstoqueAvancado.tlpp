@@ -1,44 +1,86 @@
-// EstoqueAvancado.tlpp
-// Sistema avançado de gestão, análise e automação de estoques para Protheus
-// Desenvolvido para uso corporativo, com foco em robustez, performance e integração
+/*
+ * =====================================================================
+ *  ESTOQUEAVANCADO.TLPP
+ *  Sistema avançado de gestão, análise e automação de estoques Protheus
+ *  Desenvolvido para uso corporativo, com robustez, performance e integração
+ *  Autor: [Seu Nome ou Empresa]
+ *  Data: 2025-08-01
+ *  Descrição: Controle, análise, workflow, auditoria e integração de estoques
+ * =====================================================================
+ */
 
 @Rest
 class EstoqueAvancado {
-    // =====================
-    // CONSULTA DE ESTOQUES
-    // =====================
+    // =====================================================================
+    // CONSULTA DE ESTOQUES (ROBUSTA, COM LOG, ERRO, PAGINAÇÃO, FILTROS)
+    // =====================================================================
     @Get("/estoque/consulta")
-    action consultaEstoque(params) {
-        // Parâmetros: produto, local, grupo, saldoMin, saldoMax, curva, page, pageSize, orderBy, orderDir
-        const { produto, local, grupo, saldoMin = 0, saldoMax, curva, page = 1, pageSize = 50, orderBy = 'B2_COD', orderDir = 'ASC' } = params;
-        let where = ["B2.D_E_L_E_T_ = ''"];
-        if (produto) where.push(`B2_COD = '${produto}'`);
-        if (local) where.push(`B2_LOCAL = '${local}'`);
-        if (grupo) where.push(`B1_GRUPO = '${grupo}'`);
-        if (saldoMin) where.push(`B2_QATU >= ${saldoMin}`);
-        if (saldoMax) where.push(`B2_QATU <= ${saldoMax}`);
-        if (curva) where.push(`B1_CURVA = '${curva}'`);
-        let whereStr = where.length ? 'WHERE ' + where.join(' AND ') : '';
-        let offset = (parseInt(page) - 1) * parseInt(pageSize);
-        let query = `
-            SELECT B2_COD, B1_DESC, B2_LOCAL, B2_QATU, B2_QRES, B2_QFUT, B1_GRUPO, B1_CURVA, B2_ULTATU
-            FROM SB2
-            INNER JOIN SB1 ON B2_COD = B1_COD
-            ${whereStr}
-            ORDER BY ${orderBy} ${orderDir}
-            OFFSET ${offset} ROWS FETCH NEXT ${pageSize} ROWS ONLY
-        `;
-        let countQuery = `SELECT COUNT(*) as total FROM SB2 INNER JOIN SB1 ON B2_COD = B1_COD ${whereStr}`;
-        try {
-            const itens = QuerySql(query);
-            const total = QuerySql(countQuery)[0]?.total || 0;
-            this.logConsulta(params, itens.length);
-            return { sucesso: true, total, page, pageSize, dados: itens };
-        } catch (e) {
-            this.logErro('consultaEstoque', e.message, params);
-            return { sucesso: false, erro: e.message };
-        }
-    }
+    action consultaEstoque(params)
+        /*
+         * Parâmetros: produto, local, grupo, saldoMin, saldoMax, curva, page, pageSize, orderBy, orderDir
+         * Retorna: lista de itens de estoque, total, paginação, logs e status
+         */
+        Local cProduto, cLocal, cGrupo, nSaldoMin, nSaldoMax, cCurva, nPage, nPageSize, cOrderBy, cOrderDir
+        Local aWhere, cWhere, nOffset, cQuery, cCountQuery, aItens, aCount, nTotal, oLog, lErro, cErro
+        // Inicialização de parâmetros
+        cProduto   := Iif(!Empty(params["produto"]), params["produto"], "")
+        cLocal     := Iif(!Empty(params["local"]), params["local"], "")
+        cGrupo     := Iif(!Empty(params["grupo"]), params["grupo"], "")
+        nSaldoMin  := Iif(!Empty(params["saldoMin"]), Val(params["saldoMin"]), 0)
+        nSaldoMax  := Iif(!Empty(params["saldoMax"]), Val(params["saldoMax"]), 99999999)
+        cCurva     := Iif(!Empty(params["curva"]), params["curva"], "")
+        nPage      := Iif(!Empty(params["page"]), Val(params["page"]), 1)
+        nPageSize  := Iif(!Empty(params["pageSize"]), Val(params["pageSize"]), 50)
+        cOrderBy   := Iif(!Empty(params["orderBy"]), params["orderBy"], "B2_COD")
+        cOrderDir  := Iif(!Empty(params["orderDir"]), params["orderDir"], "ASC")
+        aWhere     := { "B2.D_E_L_E_T_ = ''" }
+        If !Empty(cProduto)
+            aAdd(aWhere, "B2_COD = '" + cProduto + "'")
+        EndIf
+        If !Empty(cLocal)
+            aAdd(aWhere, "B2_LOCAL = '" + cLocal + "'")
+        EndIf
+        If !Empty(cGrupo)
+            aAdd(aWhere, "B1_GRUPO = '" + cGrupo + "'")
+        EndIf
+        If nSaldoMin > 0
+            aAdd(aWhere, "B2_QATU >= " + AllTrim(Str(nSaldoMin)))
+        EndIf
+        If nSaldoMax < 99999999
+            aAdd(aWhere, "B2_QATU <= " + AllTrim(Str(nSaldoMax)))
+        EndIf
+        If !Empty(cCurva)
+            aAdd(aWhere, "B1_CURVA = '" + cCurva + "'")
+        EndIf
+        cWhere := ""
+        If Len(aWhere) > 0
+            cWhere := " WHERE " + ArrayToStr(aWhere, " AND ")
+        EndIf
+        nOffset := (nPage - 1) * nPageSize
+        cQuery := "SELECT B2_COD, B1_DESC, B2_LOCAL, B2_QATU, B2_QRES, B2_QFUT, B1_GRUPO, B1_CURVA, B2_ULTATU " +;
+                 "FROM SB2 INNER JOIN SB1 ON B2_COD = B1_COD " + cWhere + " ORDER BY " + cOrderBy + " " + cOrderDir + ;
+                 " OFFSET " + AllTrim(Str(nOffset)) + " ROWS FETCH NEXT " + AllTrim(Str(nPageSize)) + " ROWS ONLY"
+        cCountQuery := "SELECT COUNT(*) AS TOTAL FROM SB2 INNER JOIN SB1 ON B2_COD = B1_COD " + cWhere
+        lErro := .F.
+        cErro := ""
+        oLog := { "acao" => "consultaEstoque", "parametros" => params, "data" => DToS(Date()), "hora" => Time() }
+        // Execução da consulta
+        Begin Sequence
+            aItens := QuerySql(cQuery)
+            aCount := QuerySql(cCountQuery)
+            nTotal := Iif(!Empty(aCount), aCount[1]["TOTAL"], 0)
+        Recover Using oErr
+            lErro := .T.
+            cErro := oErr:Description
+            aItens := {}
+            nTotal := 0
+        End Sequence
+        // Log de consulta
+        This:registraAuditoria("consultaEstoque", "API", oLog)
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro, "dados" => {}, "total" => 0, "page" => nPage, "pageSize" => nPageSize }
+        EndIf
+        Return { "sucesso" => .T., "dados" => aItens, "total" => nTotal, "page" => nPage, "pageSize" => nPageSize }
 
     // =====================
     // DASHBOARD DE ESTOQUE
