@@ -308,7 +308,10 @@ class EstoqueAvancado {
     // =====================
     @Get("/estoque/integracao/compras-vendas/:produto")
     action integracaoComprasVendas(params)
-        Local cProduto := params["produto"], aCompras := {}, aVendas := {}, cQuery, aDados
+        Local cProduto, aCompras, aVendas, cQuery, aDados
+        cProduto := params["produto"]
+        aCompras := {}
+        aVendas := {}
         // Compras nos últimos 6 meses
         cQuery := "SELECT SUM(C6_QTDVEN) AS QTDCOMPRA FROM SC6 WHERE C6_PRODUTO = '" + cProduto + "' AND C6_EMISSAO >= '" + DToS(Date() - 180) + "' AND D_E_L_E_T_ = ''"
         aDados := QuerySql(cQuery)
@@ -328,8 +331,14 @@ class EstoqueAvancado {
     // =====================
     @Post("/estoque/workflow/solicitar")
     action solicitarMovimentacao(body)
-        Local cProduto := body["produto"], cLocal := body["local"], nQtd := body["quantidade"], cTipo := body["tipo"], cUsuario := body["usuario"], cObs := body["obs"]
-        Local file := "./workflow_mov.json", fs, all
+        Local cProduto, cLocal, nQtd, cTipo, cUsuario, cObs, file, fs, all
+        cProduto := body["produto"]
+        cLocal := body["local"]
+        nQtd := body["quantidade"]
+        cTipo := body["tipo"]
+        cUsuario := body["usuario"]
+        cObs := body["obs"]
+        file := "./workflow_mov.json"
         all := {}
         If File(file)
             fs := MemoRead(file)
@@ -341,7 +350,9 @@ class EstoqueAvancado {
 
     @Post("/estoque/workflow/aprovar")
     action aprovarMovimentacao(body)
-        Local nIdx, file := "./workflow_mov.json", fs, all, lAchou := .F.
+        Local nIdx, file, fs, all, lAchou
+        file := "./workflow_mov.json"
+        lAchou := .F.
         all := {}
         If File(file)
             fs := MemoRead(file)
@@ -365,7 +376,9 @@ class EstoqueAvancado {
 
     @Get("/estoque/workflow/pendentes")
     action listaPendentes(params)
-        Local file := "./workflow_mov.json", fs, all, aRet := {}
+        Local file, fs, all, aRet
+        file := "./workflow_mov.json"
+        aRet := {}
         all := {}
         If File(file)
             fs := MemoRead(file)
@@ -383,7 +396,8 @@ class EstoqueAvancado {
     // =====================
     @Get("/estoque/alertas")
     action alertasEstoque(params)
-        Local aAlertas := {}, cQuery, aDados, nI
+        Local aAlertas, cQuery, aDados, nI
+        aAlertas := {}
         // Ruptura
         cQuery := "SELECT B2_COD, B2_LOCAL, B2_QATU FROM SB2 WHERE D_E_L_E_T_ = '' AND B2_QATU <= 0"
         aDados := QuerySql(cQuery)
@@ -403,7 +417,10 @@ class EstoqueAvancado {
     // =====================
     @Get("/estoque/abc/detalhado")
     action abcDetalhado(params)
-        Local cQuery, aDados, aRet := {}, nTotal := 0, nI, nPerc := 0
+        Local cQuery, aDados, aRet, nTotal, nI, nPerc
+        aRet := {}
+        nTotal := 0
+        nPerc := 0
         // Busca total de vendas
         cQuery := "SELECT SUM(D2_TOTAL) AS TOTAL FROM SD2 WHERE D_E_L_E_T_ = ''"
         aDados := QuerySql(cQuery)
@@ -413,7 +430,6 @@ class EstoqueAvancado {
         // Busca vendas por produto
         cQuery := "SELECT D2_COD, SUM(D2_TOTAL) AS VLR FROM SD2 WHERE D_E_L_E_T_ = '' GROUP BY D2_COD ORDER BY VLR DESC"
         aDados := QuerySql(cQuery)
-        nPerc := 0
         For nI := 1 To Len(aDados)
             nPerc += (aDados[nI]["VLR"] / nTotal) * 100
             aAdd(aRet, { "produto" => aDados[nI]["D2_COD"], "vendas" => aDados[nI]["VLR"], "perc_acumulado" => nPerc })
@@ -425,8 +441,12 @@ class EstoqueAvancado {
     // =====================
     @Post("/estoque/inventario/registrar")
     action registrarInventario(body)
-        Local cProduto := body["produto"], cLocal := body["local"], nQtdFisico := body["quantidade"], cUsuario := body["usuario"]
-        Local file := "./inventario_fisico.json", fs, all
+        Local cProduto, cLocal, nQtdFisico, cUsuario, file, fs, all
+        cProduto := body["produto"]
+        cLocal := body["local"]
+        nQtdFisico := body["quantidade"]
+        cUsuario := body["usuario"]
+        file := "./inventario_fisico.json"
         all := {}
         If File(file)
             fs := MemoRead(file)
@@ -438,7 +458,11 @@ class EstoqueAvancado {
 
     @Get("/estoque/inventario/:produto/:local")
     action consultaInventario(params)
-        Local cProduto := params["produto"], cLocal := params["local"], file := "./inventario_fisico.json", fs, all, aRet := {}
+        Local cProduto, cLocal, file, fs, all, aRet
+        cProduto := params["produto"]
+        cLocal := params["local"]
+        file := "./inventario_fisico.json"
+        aRet := {}
         all := {}
         If File(file)
             fs := MemoRead(file)
