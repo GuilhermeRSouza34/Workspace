@@ -40,5 +40,101 @@ class EstoqueAvancado {
         }
     }
 
-    // ...continua com dashboard, relatórios, movimentações, integrações, uploads, auditoria, etc...
+    // =====================
+    // DASHBOARD DE ESTOQUE
+    // =====================
+    @Get("/estoque/dashboard")
+    action dashboardEstoque(params)
+        Local nTotal := 0, nRuptura := 0, nExcesso := 0, nGiro := 0, aCurva := {}, aLocais := {}, nDias := 90
+        Local cQuery, aDados, nI
+        // Total em estoque
+        cQuery := "SELECT SUM(B2_QATU) AS TOTAL FROM SB2 WHERE D_E_L_E_T_ = ''"
+        aDados := QuerySql(cQuery)
+        If !Empty(aDados)
+            nTotal := aDados[1]["TOTAL"]
+        EndIf
+        // Produtos em ruptura (saldo <= 0)
+        cQuery := "SELECT COUNT(*) AS RUPTURA FROM SB2 WHERE D_E_L_E_T_ = '' AND B2_QATU <= 0"
+        aDados := QuerySql(cQuery)
+        If !Empty(aDados)
+            nRuptura := aDados[1]["RUPTURA"]
+        EndIf
+        // Produtos em excesso (saldo > B1_ESTSEG*2)
+        cQuery := "SELECT COUNT(*) AS EXCESSO FROM SB2 INNER JOIN SB1 ON B2_COD = B1_COD WHERE SB2.D_E_L_E_T_ = '' AND B2_QATU > B1_ESTSEG*2"
+        aDados := QuerySql(cQuery)
+        If !Empty(aDados)
+            nExcesso := aDados[1]["EXCESSO"]
+        EndIf
+        // Giro médio dos últimos 90 dias
+        cQuery := "SELECT AVG(MOV.QTDE) AS GIRO FROM (SELECT SUM(D2_QUANT) AS QTDE FROM SD2 WHERE D2_EMISSAO >= '" + DToS(Date() - nDias) + "' AND D_E_L_E_T_ = '' GROUP BY D2_COD) MOV"
+        aDados := QuerySql(cQuery)
+        If !Empty(aDados)
+            nGiro := aDados[1]["GIRO"]
+        EndIf
+        // Curva ABC
+        cQuery := "SELECT B1_CURVA, COUNT(*) AS QTD FROM SB1 WHERE D_E_L_E_T_ = '' GROUP BY B1_CURVA"
+        aDados := QuerySql(cQuery)
+        For nI := 1 To Len(aDados)
+            aAdd(aCurva, { aDados[nI]["B1_CURVA"], aDados[nI]["QTD"] })
+        Next
+        // Estoque por local
+        cQuery := "SELECT B2_LOCAL, SUM(B2_QATU) AS QTD FROM SB2 WHERE D_E_L_E_T_ = '' GROUP BY B2_LOCAL"
+        aDados := QuerySql(cQuery)
+        For nI := 1 To Len(aDados)
+            aAdd(aLocais, { aDados[nI]["B2_LOCAL"], aDados[nI]["QTD"] })
+        Next
+        Return { "sucesso" => .T., "total" => nTotal, "ruptura" => nRuptura, "excesso" => nExcesso, "giro" => nGiro, "curva" => aCurva, "locais" => aLocais }
+
+    // =====================
+    // MOVIMENTAÇÃO DE ESTOQUE
+    // =====================
+    @Post("/estoque/movimentar")
+    action movimentaEstoque(body)
+        Local cProduto := body["produto"], cLocal := body["local"], nQtd := body["quantidade"], cTipo := body["tipo"], cObs := body["obs"]
+        Local cQuery, lOk := .F.
+        If Empty(cProduto) .Or. Empty(cLocal) .Or. Empty(nQtd) .Or. Empty(cTipo)
+            Return { "sucesso" => .F., "erro" => "Parâmetros obrigatórios ausentes." }
+        EndIf
+        // Atualiza saldo
+        If cTipo == "E"
+            cQuery := "UPDATE SB2 SET B2_QATU = B2_QATU + " + AllTrim(Str(nQtd)) + " WHERE B2_COD = '" + cProduto + "' AND B2_LOCAL = '" + cLocal + "' AND D_E_L_E_T_ = ''"
+        ElseIf cTipo == "S"
+            cQuery := "UPDATE SB2 SET B2_QATU = B2_QATU - " + AllTrim(Str(nQtd)) + " WHERE B2_COD = '" + cProduto + "' AND B2_LOCAL = '" + cLocal + "' AND D_E_L_E_T_ = ''"
+        Else
+            Return { "sucesso" => .F., "erro" => "Tipo de movimentação inválido." }
+        EndIf
+        lOk := ExecSql(cQuery)
+        If lOk
+            // Registra histórico
+            This:registraHistoricoMov(cProduto, cLocal, nQtd, cTipo, cObs)
+            Return { "sucesso" => .T., "mensagem" => "Movimentação realizada com sucesso." }
+        Else
+            Return { "sucesso" => .F., "erro" => "Falha ao movimentar estoque." }
+        EndIf
+
+    // =====================
+    // HISTÓRICO DE MOVIMENTAÇÃO
+    // =====================
+    @Get("/estoque/historico/:produto/:local")
+    action historicoMov(params)
+        Local cProduto := params["produto"], cLocal := params["local"]
+        Local cQuery, aDados := {}
+        If Empty(cProduto) .Or. Empty(cLocal)
+            Return { "sucesso" => .F., "erro" => "Informe produto e local." }
+        EndIf
+        cQuery := "SELECT * FROM HISTMOV WHERE PRODUTO = '" + cProduto + "' AND LOCAL = '" + cLocal + "' ORDER BY DATA DESC"
+        aDados := QuerySql(cQuery)
+        Return { "sucesso" => .T., "historico" => aDados }
+
+    // Função auxiliar: registra histórico de movimentação
+    registraHistoricoMov(cProduto, cLocal, nQtd, cTipo, cObs)
+        Local fs, file, all
+        file := "./historico_mov.json"
+        all := {}
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+        EndIf
+        aAdd(all, { "produto" => cProduto, "local" => cLocal, "quantidade" => nQtd, "tipo" => cTipo, "obs" => cObs, "data" => DToS(Date()) })
+        MemoWrite(file, JsonEncode(all))
 }
