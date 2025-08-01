@@ -137,4 +137,169 @@ class EstoqueAvancado {
         EndIf
         aAdd(all, { "produto" => cProduto, "local" => cLocal, "quantidade" => nQtd, "tipo" => cTipo, "obs" => cObs, "data" => DToS(Date()) })
         MemoWrite(file, JsonEncode(all))
+
+    // =====================
+    // RELATÓRIOS E EXPORTAÇÃO
+    // =====================
+    @Post("/estoque/relatorio")
+    action relatorioEstoque(body)
+        Local cCampos := body["campos"], cFiltro := body["filtro"], cOrder := body["order"], cFormato := body["formato"]
+        Local cQuery, aDados, cFile, lOk := .F.
+        If Empty(cCampos)
+            cCampos := "B2_COD, B1_DESC, B2_LOCAL, B2_QATU, B1_GRUPO"
+        EndIf
+        cQuery := "SELECT " + cCampos + " FROM SB2 INNER JOIN SB1 ON B2_COD = B1_COD WHERE SB2.D_E_L_E_T_ = ''"
+        If !Empty(cFiltro)
+            cQuery += " AND " + cFiltro
+        EndIf
+        If !Empty(cOrder)
+            cQuery += " ORDER BY " + cOrder
+        EndIf
+        aDados := QuerySql(cQuery)
+        If cFormato == "csv"
+            cFile := This:exportaCSV(aDados, cCampos)
+        Else
+            cFile := This:exportaXLSX(aDados, cCampos)
+        EndIf
+        Return { "sucesso" => .T., "arquivo" => cFile }
+
+    exportaCSV(aDados, cCampos)
+        Local cFile := "./relatorio_estoque.csv", nI, nJ, aCampos, cLinha
+        aCampos := StrTokArr(cCampos, ",")
+        cLinha := ""
+        For nJ := 1 To Len(aCampos)
+            cLinha += AllTrim(aCampos[nJ]) + ";"
+        Next
+        MemoWrite(cFile, cLinha + CRLF)
+        For nI := 1 To Len(aDados)
+            cLinha := ""
+            For nJ := 1 To Len(aCampos)
+                cLinha += AllTrim(Str(aDados[nI][AllTrim(aCampos[nJ])])) + ";"
+            Next
+            MemoWrite(cFile, MemoRead(cFile) + cLinha + CRLF)
+        Next
+        Return cFile
+
+    exportaXLSX(aDados, cCampos)
+        // Placeholder: exportação XLSX pode ser feita via integração externa ou rotina customizada
+        Return "./relatorio_estoque.xlsx"
+
+    // =====================
+    // UPLOAD DE DOCUMENTOS
+    // =====================
+    @Post("/estoque/upload/:produto")
+    action uploadDoc(params, req)
+        Local cProduto := params["produto"], cNome := req["filename"], cConteudo := req["filedata"]
+        Local cDir := "./docs_estoque/" + cProduto, cFile
+        If !Directory(cDir)
+            MakeDir(cDir)
+        EndIf
+        cFile := cDir + "/" + cNome
+        MemoWrite(cFile, cConteudo)
+        This:registraDocProduto(cProduto, cNome, cFile)
+        Return { "sucesso" => .T., "mensagem" => "Documento salvo." }
+
+    registraDocProduto(cProduto, cNome, cFile)
+        Local fs, file, all
+        file := "./docs_estoque.json"
+        all := {}
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+        EndIf
+        aAdd(all, { "produto" => cProduto, "nome" => cNome, "caminho" => cFile, "data" => DToS(Date()) })
+        MemoWrite(file, JsonEncode(all))
+
+    // =====================
+    // COMENTÁRIOS/OCORRÊNCIAS
+    // =====================
+    @Post("/estoque/comentario/:produto")
+    action comentaProduto(params, body)
+        Local cProduto := params["produto"], cUsuario := body["usuario"], cTexto := body["comentario"]
+        Local file := "./comentarios_estoque.json", fs, all
+        all := {}
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+        EndIf
+        aAdd(all, { "produto" => cProduto, "usuario" => cUsuario, "comentario" => cTexto, "data" => DToS(Date()) })
+        MemoWrite(file, JsonEncode(all))
+        Return { "sucesso" => .T. }
+
+    @Get("/estoque/comentarios/:produto")
+    action listaComentarios(params)
+        Local cProduto := params["produto"], file := "./comentarios_estoque.json", fs, all, aRet := {}
+        all := {}
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+        EndIf
+        ForEach a IN all
+            If a["produto"] == cProduto
+                aAdd(aRet, a)
+            EndIf
+        Next
+        Return { "sucesso" => .T., "comentarios" => aRet }
+
+    // =====================
+    // AUDITORIA DE OPERAÇÕES
+    // =====================
+    registraAuditoria(cAcao, cUsuario, cDetalhes)
+        Local file := "./auditoria_estoque.json", fs, all
+        all := {}
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+        EndIf
+        aAdd(all, { "acao" => cAcao, "usuario" => cUsuario, "detalhes" => cDetalhes, "data" => DToS(Date()) })
+        MemoWrite(file, JsonEncode(all))
+
+    @Get("/estoque/auditoria")
+    action listaAuditoria(params)
+        Local file := "./auditoria_estoque.json", fs, all
+        all := {}
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+        EndIf
+        Return { "sucesso" => .T., "auditoria" => all }
+
+    // =====================
+    // API EXTERNA (TOKEN)
+    // =====================
+    @Post("/estoque/token")
+    action geraToken(body)
+        Local cUsuario := body["usuario"], cToken := StrTran(GuidGen(), "-", "")
+        Local file := "./tokens_estoque.json", fs, all
+        all := {}
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+        EndIf
+        aAdd(all, { "usuario" => cUsuario, "token" => cToken, "data" => DToS(Date()) })
+        MemoWrite(file, JsonEncode(all))
+        Return { "sucesso" => .T., "token" => cToken }
+
+    @Post("/estoque/api/consulta")
+    action apiConsultaEstoque(body)
+        Local cToken := body["token"], cProduto := body["produto"]
+        Local file := "./tokens_estoque.json", fs, all, lValido := .F.
+        all := {}
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+        EndIf
+        ForEach t IN all
+            If t["token"] == cToken
+                lValido := .T.
+                Exit
+            EndIf
+        Next
+        If !lValido
+            Return { "sucesso" => .F., "erro" => "Token inválido." }
+        EndIf
+        // Consulta estoque simplificada
+        Local cQuery := "SELECT B2_COD, B2_LOCAL, B2_QATU FROM SB2 WHERE D_E_L_E_T_ = '' AND B2_COD = '" + cProduto + "'"
+        Local aDados := QuerySql(cQuery)
+        Return { "sucesso" => .T., "dados" => aDados }
 }
