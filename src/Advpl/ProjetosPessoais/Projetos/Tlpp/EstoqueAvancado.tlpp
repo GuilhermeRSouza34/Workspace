@@ -1,0 +1,44 @@
+// EstoqueAvancado.tlpp
+// Sistema avançado de gestão, análise e automação de estoques para Protheus
+// Desenvolvido para uso corporativo, com foco em robustez, performance e integração
+
+@Rest
+class EstoqueAvancado {
+    // =====================
+    // CONSULTA DE ESTOQUES
+    // =====================
+    @Get("/estoque/consulta")
+    action consultaEstoque(params) {
+        // Parâmetros: produto, local, grupo, saldoMin, saldoMax, curva, page, pageSize, orderBy, orderDir
+        const { produto, local, grupo, saldoMin = 0, saldoMax, curva, page = 1, pageSize = 50, orderBy = 'B2_COD', orderDir = 'ASC' } = params;
+        let where = ["B2.D_E_L_E_T_ = ''"];
+        if (produto) where.push(`B2_COD = '${produto}'`);
+        if (local) where.push(`B2_LOCAL = '${local}'`);
+        if (grupo) where.push(`B1_GRUPO = '${grupo}'`);
+        if (saldoMin) where.push(`B2_QATU >= ${saldoMin}`);
+        if (saldoMax) where.push(`B2_QATU <= ${saldoMax}`);
+        if (curva) where.push(`B1_CURVA = '${curva}'`);
+        let whereStr = where.length ? 'WHERE ' + where.join(' AND ') : '';
+        let offset = (parseInt(page) - 1) * parseInt(pageSize);
+        let query = `
+            SELECT B2_COD, B1_DESC, B2_LOCAL, B2_QATU, B2_QRES, B2_QFUT, B1_GRUPO, B1_CURVA, B2_ULTATU
+            FROM SB2
+            INNER JOIN SB1 ON B2_COD = B1_COD
+            ${whereStr}
+            ORDER BY ${orderBy} ${orderDir}
+            OFFSET ${offset} ROWS FETCH NEXT ${pageSize} ROWS ONLY
+        `;
+        let countQuery = `SELECT COUNT(*) as total FROM SB2 INNER JOIN SB1 ON B2_COD = B1_COD ${whereStr}`;
+        try {
+            const itens = QuerySql(query);
+            const total = QuerySql(countQuery)[0]?.total || 0;
+            this.logConsulta(params, itens.length);
+            return { sucesso: true, total, page, pageSize, dados: itens };
+        } catch (e) {
+            this.logErro('consultaEstoque', e.message, params);
+            return { sucesso: false, erro: e.message };
+        }
+    }
+
+    // ...continua com dashboard, relatórios, movimentações, integrações, uploads, auditoria, etc...
+}
