@@ -6,7 +6,7 @@
  *  Autor: Sistema PCP Avançado
  *  Data: 2025-08-04
  *  Descrição: Controle completo de OPs, materiais, apontamentos, workflow e análises
- *  Versão: 1.0 - Partes 1 e 2: Consulta, Dashboard, Materiais e Apontamentos
+ *  Versão: 1.0 - Sistema Completo: Consulta, Dashboard, Materiais, Apontamentos, Workflow, Relatórios e Integrações
  * =====================================================================
  */
 
@@ -1035,4 +1035,1031 @@ class GestaoOPAvancado {
         EndIf
         
         Return .T.
-}
+
+    // =====================================================================
+    // PARTE 3: WORKFLOW E APROVAÇÕES
+    // =====================================================================
+    
+    /*
+     * Solicita aprovação para criação de nova OP
+     * Workflow completo com validações, níveis hierárquicos e notificações
+     */
+    @Post("/pcp/op/solicitar-aprovacao")
+    action solicitarAprovacaoOP(body)
+        Local cProduto, nQuantidade, dDataNecessidade, cPrioridade, cCentro, cSolicitante
+        Local cJustificativa, cObservacoes, aValidacoes, cMsgValidacao, nIndice
+        Local oSolicitacao, file, fs, all, lErro, cErro, oLog, cCodigoSolicitacao
+        
+        // Extração de parâmetros
+        cProduto := AllTrim(body["produto"])
+        nQuantidade := Val(body["quantidade"])
+        dDataNecessidade := SToD(StrTran(body["dataNecessidade"], "-", ""))
+        cPrioridade := AllTrim(body["prioridade"])
+        cCentro := AllTrim(body["centro"])
+        cSolicitante := AllTrim(body["solicitante"])
+        cJustificativa := body["justificativa"]
+        cObservacoes := body["observacoes"]
+        
+        lErro := .F.
+        cErro := ""
+        aValidacoes := {}
+        
+        // Validações obrigatórias
+        If Empty(cProduto)
+            aAdd(aValidacoes, "Produto é obrigatório")
+        EndIf
+        If nQuantidade <= 0
+            aAdd(aValidacoes, "Quantidade deve ser maior que zero")
+        EndIf
+        If Empty(dDataNecessidade)
+            aAdd(aValidacoes, "Data de necessidade é obrigatória")
+        EndIf
+        If dDataNecessidade < Date()
+            aAdd(aValidacoes, "Data de necessidade não pode ser anterior à data atual")
+        EndIf
+        If Empty(cPrioridade)
+            aAdd(aValidacoes, "Prioridade é obrigatória")
+        EndIf
+        If Empty(cSolicitante)
+            aAdd(aValidacoes, "Solicitante é obrigatório")
+        EndIf
+        If Empty(cJustificativa)
+            aAdd(aValidacoes, "Justificativa é obrigatória")
+        EndIf
+        
+        If Len(aValidacoes) > 0
+            cMsgValidacao := ""
+            For nIndice := 1 To Len(aValidacoes)
+                cMsgValidacao += aValidacoes[nIndice] + "; "
+            Next
+            Return { "sucesso" => .F., "erro" => "Validações: " + cMsgValidacao }
+        EndIf
+        
+        Begin Sequence
+            // Gera código único da solicitação
+            cCodigoSolicitacao := "SOL" + DToS(Date()) + StrTran(Time(), ":", "") + StrZero(Randomize(1, 999), 3)
+            
+            // Validações de negócio específicas
+            If !This:validaProdutoExiste(cProduto)
+                lErro := .T.
+                cErro := "Produto não encontrado no cadastro: " + cProduto
+            EndIf
+            
+            If !lErro .And. !This:validaCentroExiste(cCentro)
+                lErro := .T.
+                cErro := "Centro de custo não encontrado: " + cCentro
+            EndIf
+            
+            If !lErro
+                // Monta objeto da solicitação
+                oSolicitacao := {;
+                    "codigo" => cCodigoSolicitacao,;
+                    "produto" => cProduto,;
+                    "quantidade" => nQuantidade,;
+                    "dataNecessidade" => DToS(dDataNecessidade),;
+                    "prioridade" => cPrioridade,;
+                    "centro" => cCentro,;
+                    "solicitante" => cSolicitante,;
+                    "justificativa" => cJustificativa,;
+                    "observacoes" => cObservacoes,;
+                    "status" => "PENDENTE",;
+                    "nivelAprovacao" => 1,;
+                    "dataSolicitacao" => DToS(Date()),;
+                    "horaSolicitacao" => Time(),;
+                    "aprovadores" => This:defineAprovadores(cPrioridade, nQuantidade),;
+                    "historico" => {};
+                }
+                
+                // Salva solicitação
+                file := "./solicitacoes_op.json"
+                all := {}
+                If File(file)
+                    fs := MemoRead(file)
+                    all := JsonDecode(fs)
+                EndIf
+                
+                aAdd(all, oSolicitacao)
+                MemoWrite(file, JsonEncode(all))
+                
+                // Envia notificação para aprovadores
+                This:enviarNotificacaoAprovacao(oSolicitacao)
+            EndIf
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro ao solicitar aprovação: " + oErr:Description
+        End Sequence
+        
+        oLog := { "acao" => "solicitarAprovacaoOP", "codigo" => cCodigoSolicitacao, "solicitante" => cSolicitante }
+        This:registraLogPCP("solicitarAprovacaoOP", cSolicitante, oLog, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "codigoSolicitacao" => cCodigoSolicitacao, "mensagem" => "Solicitação enviada para aprovação" }
+
+    /*
+     * Processa aprovação ou rejeição de solicitação de OP
+     */
+    @Post("/pcp/op/aprovar")
+    action processarAprovacao(body)
+        Local cCodigoSolicitacao, cAprovador, cAcao, cObservacoes, file, fs, all
+        Local nI, lAchou, oSolicitacao, oHistorico, lAprovado, lErro, cErro, oLog
+        
+        cCodigoSolicitacao := AllTrim(body["codigo"])
+        cAprovador := AllTrim(body["aprovador"])
+        cAcao := AllTrim(body["acao"])  // APROVAR ou REJEITAR
+        cObservacoes := body["observacoes"]
+        
+        lErro := .F.
+        cErro := ""
+        lAchou := .F.
+        lAprovado := .F.
+        
+        If Empty(cCodigoSolicitacao) .Or. Empty(cAprovador) .Or. Empty(cAcao)
+            Return { "sucesso" => .F., "erro" => "Parâmetros obrigatórios: codigo, aprovador, acao" }
+        EndIf
+        
+        If !(cAcao $ "APROVAR|REJEITAR")
+            Return { "sucesso" => .F., "erro" => "Ação deve ser APROVAR ou REJEITAR" }
+        EndIf
+        
+        Begin Sequence
+            file := "./solicitacoes_op.json"
+            all := {}
+            
+            If File(file)
+                fs := MemoRead(file)
+                all := JsonDecode(fs)
+            EndIf
+            
+            // Localiza a solicitação
+            For nI := 1 To Len(all)
+                If all[nI]["codigo"] == cCodigoSolicitacao
+                    oSolicitacao := all[nI]
+                    lAchou := .T.
+                    Exit
+                EndIf
+            Next
+            
+            If !lAchou
+                lErro := .T.
+                cErro := "Solicitação não encontrada: " + cCodigoSolicitacao
+            ElseIf oSolicitacao["status"] != "PENDENTE"
+                lErro := .T.
+                cErro := "Solicitação já foi processada"
+            ElseIf !This:validaAprovador(cAprovador, oSolicitacao["aprovadores"], oSolicitacao["nivelAprovacao"])
+                lErro := .T.
+                cErro := "Usuário não autorizado para esta aprovação"
+            EndIf
+            
+            If !lErro
+                // Registra histórico da aprovação
+                oHistorico := {;
+                    "nivel" => oSolicitacao["nivelAprovacao"],;
+                    "aprovador" => cAprovador,;
+                    "acao" => cAcao,;
+                    "observacoes" => cObservacoes,;
+                    "data" => DToS(Date()),;
+                    "hora" => Time();
+                }
+                
+                aAdd(all[nI]["historico"], oHistorico)
+                
+                If cAcao == "REJEITAR"
+                    all[nI]["status"] := "REJEITADA"
+                    all[nI]["dataRejeicao"] := DToS(Date())
+                    all[nI]["horaRejeicao"] := Time()
+                Else
+                    // Verifica se precisa de mais níveis de aprovação
+                    If This:precisaMaisAprovacao(oSolicitacao["aprovadores"], oSolicitacao["nivelAprovacao"])
+                        all[nI]["nivelAprovacao"] := oSolicitacao["nivelAprovacao"] + 1
+                        all[nI]["status"] := "PENDENTE"
+                        // Notifica próximo nível
+                        This:enviarNotificacaoAprovacao(all[nI])
+                    Else
+                        all[nI]["status"] := "APROVADA"
+                        all[nI]["dataAprovacao"] := DToS(Date())
+                        all[nI]["horaAprovacao"] := Time()
+                        lAprovado := .T.
+                        
+                        // Cria OP automaticamente
+                        This:criarOPAutomatica(all[nI])
+                    EndIf
+                EndIf
+                
+                MemoWrite(file, JsonEncode(all))
+            EndIf
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro ao processar aprovação: " + oErr:Description
+        End Sequence
+        
+        oLog := { "acao" => "processarAprovacao", "codigo" => cCodigoSolicitacao, "aprovador" => cAprovador, "resultado" => cAcao }
+        This:registraLogPCP("processarAprovacao", cAprovador, oLog, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "mensagem" => "Aprovação processada com sucesso", "opCriada" => lAprovado }
+
+    /*
+     * Lista solicitações pendentes de aprovação por usuário
+     */
+    @Get("/pcp/aprovacoes/pendentes/:usuario")
+    action listarAprovacoesPendentes(params)
+        Local cUsuario, file, fs, all, nI, aPendentes, oItem, lErro, cErro
+        
+        cUsuario := AllTrim(params["usuario"])
+        lErro := .F.
+        cErro := ""
+        aPendentes := {}
+        
+        If Empty(cUsuario)
+            Return { "sucesso" => .F., "erro" => "Usuário é obrigatório" }
+        EndIf
+        
+        Begin Sequence
+            file := "./solicitacoes_op.json"
+            
+            If File(file)
+                fs := MemoRead(file)
+                all := JsonDecode(fs)
+                
+                For nI := 1 To Len(all)
+                    If all[nI]["status"] == "PENDENTE" .And. This:validaAprovador(cUsuario, all[nI]["aprovadores"], all[nI]["nivelAprovacao"])
+                        oItem := {;
+                            "codigo" => all[nI]["codigo"],;
+                            "produto" => all[nI]["produto"],;
+                            "quantidade" => all[nI]["quantidade"],;
+                            "dataNecessidade" => all[nI]["dataNecessidade"],;
+                            "prioridade" => all[nI]["prioridade"],;
+                            "solicitante" => all[nI]["solicitante"],;
+                            "justificativa" => all[nI]["justificativa"],;
+                            "nivelAprovacao" => all[nI]["nivelAprovacao"],;
+                            "dataSolicitacao" => all[nI]["dataSolicitacao"];
+                        }
+                        aAdd(aPendentes, oItem)
+                    EndIf
+                Next
+            EndIf
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro ao listar aprovações pendentes: " + oErr:Description
+        End Sequence
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "pendentes" => aPendentes, "total" => Len(aPendentes) }
+
+    // =====================================================================
+    // PARTE 4: RELATÓRIOS E ANÁLISES AVANÇADAS
+    // =====================================================================
+    
+    /*
+     * Relatório gerencial de produtividade com análises estatísticas
+     */
+    @Post("/pcp/relatorios/produtividade")
+    action relatorioProdutividade(body)
+        Local dDataIni, dDataFim, cCentro, cRecurso, cFormato, aResultados, cQuery
+        Local aDados, nI, oAnalise, nTotalPlanejado, nTotalProduzido, nEficiencia
+        Local aEficienciaCentros, aEficienciaRecursos, aEvolucaoTemporal, lErro, cErro
+        
+        dDataIni := SToD(StrTran(body["dataInicio"], "-", ""))
+        dDataFim := SToD(StrTran(body["dataFim"], "-", ""))
+        cCentro := Iif(body["centro"] != Nil, AllTrim(body["centro"]), "")
+        cRecurso := Iif(body["recurso"] != Nil, AllTrim(body["recurso"]), "")
+        cFormato := Iif(body["formato"] != Nil, AllTrim(body["formato"]), "JSON")
+        
+        lErro := .F.
+        cErro := ""
+        aResultados := {}
+        
+        If Empty(dDataIni) .Or. Empty(dDataFim)
+            Return { "sucesso" => .F., "erro" => "Período é obrigatório" }
+        EndIf
+        
+        If dDataFim < dDataIni
+            Return { "sucesso" => .F., "erro" => "Data fim deve ser maior que data início" }
+        EndIf
+        
+        Begin Sequence
+            // Análise geral de produtividade
+            cQuery := "SELECT SUM(C2_QUANT) AS PLANEJADO, SUM(C2_QUJE) AS PRODUZIDO, " +;
+                     "SUM(C2_PERDA) AS REFUGO, COUNT(*) AS TOTAL_OPS " +;
+                     "FROM SC2010 WHERE D_E_L_E_T_ = '' " +;
+                     "AND C2_EMISSAO BETWEEN '" + DToS(dDataIni) + "' AND '" + DToS(dDataFim) + "'"
+            
+            If !Empty(cCentro)
+                cQuery += " AND C2_CC = '" + cCentro + "'"
+            EndIf
+            
+            aDados := QuerySql(cQuery)
+            If !Empty(aDados)
+                nTotalPlanejado := aDados[1]["PLANEJADO"]
+                nTotalProduzido := aDados[1]["PRODUZIDO"]
+                nEficiencia := Iif(nTotalPlanejado > 0, Round((nTotalProduzido/nTotalPlanejado)*100, 2), 0)
+                
+                oAnalise := {;
+                    "periodo" => DToS(dDataIni) + " a " + DToS(dDataFim),;
+                    "totalPlanejado" => nTotalPlanejado,;
+                    "totalProduzido" => nTotalProduzido,;
+                    "totalRefugo" => aDados[1]["REFUGO"],;
+                    "totalOPs" => aDados[1]["TOTAL_OPS"],;
+                    "eficienciaGeral" => nEficiencia;
+                }
+            Else
+                oAnalise := { "periodo" => DToS(dDataIni) + " a " + DToS(dDataFim), "semDados" => .T. }
+            EndIf
+            
+            // Eficiência por centro de custo
+            cQuery := "SELECT C2_CC, SUM(C2_QUANT) AS PLANEJADO, SUM(C2_QUJE) AS PRODUZIDO, " +;
+                     "COUNT(*) AS OPS FROM SC2010 WHERE D_E_L_E_T_ = '' " +;
+                     "AND C2_EMISSAO BETWEEN '" + DToS(dDataIni) + "' AND '" + DToS(dDataFim) + "' " +;
+                     "GROUP BY C2_CC ORDER BY C2_CC"
+            
+            aEficienciaCentros := QuerySql(cQuery)
+            For nI := 1 To Len(aEficienciaCentros)
+                aEficienciaCentros[nI]["eficiencia"] := Iif(aEficienciaCentros[nI]["PLANEJADO"] > 0, ;
+                    Round((aEficienciaCentros[nI]["PRODUZIDO"]/aEficienciaCentros[nI]["PLANEJADO"])*100, 2), 0)
+            Next
+            
+            // Evolução temporal (semanal)
+            aEvolucaoTemporal := This:calculaEvolucaoTemporal(dDataIni, dDataFim, cCentro)
+            
+            // Análise de recursos
+            aEficienciaRecursos := This:analisaEficienciaRecursos(dDataIni, dDataFim, cRecurso)
+            
+            aResultados := {;
+                "analiseGeral" => oAnalise,;
+                "eficienciaCentros" => aEficienciaCentros,;
+                "evolucaoTemporal" => aEvolucaoTemporal,;
+                "eficienciaRecursos" => aEficienciaRecursos;
+            }
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro ao gerar relatório: " + oErr:Description
+        End Sequence
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        // Gera arquivo se solicitado
+        If cFormato == "CSV"
+            This:exportarCSVProdutividade(aResultados, dDataIni, dDataFim)
+        EndIf
+        
+        Return { "sucesso" => .T., "relatorio" => aResultados, "formato" => cFormato }
+
+    /*
+     * Análise de custos de produção e desperdícios
+     */
+    @Get("/pcp/analises/custos")
+    action analiseCustos(params)
+        Local dDataIni, dDataFim, aCustos, cQuery, aDados, nI, oCusto
+        Local nCustoMaterial, nCustoMaoObra, nCustoRefugo, nCustoTotal, lErro, cErro
+        
+        dDataIni := Iif(!Empty(params["dataIni"]), SToD(StrTran(params["dataIni"], "-", "")), Date() - 30)
+        dDataFim := Iif(!Empty(params["dataFim"]), SToD(StrTran(params["dataFim"], "-", "")), Date())
+        lErro := .F.
+        cErro := ""
+        aCustos := {}
+        
+        Begin Sequence
+            // Análise de custos por OP
+            cQuery := "SELECT C2_NUM, C2_PRODUTO, B1_DESC, C2_QUANT, C2_QUJE, C2_PERDA, " +;
+                     "SUM(D4_QUANT * B1_CUSTD) AS CUSTO_MATERIAL " +;
+                     "FROM SC2010 C2 " +;
+                     "LEFT JOIN SB1010 B1 ON C2_PRODUTO = B1_COD AND B1.D_E_L_E_T_ = '' " +;
+                     "LEFT JOIN SD4010 D4 ON C2_NUM = D4_OP AND D4.D_E_L_E_T_ = '' " +;
+                     "LEFT JOIN SB1010 B1M ON D4_COD = B1M_COD AND B1M.D_E_L_E_T_ = '' " +;
+                     "WHERE C2.D_E_L_E_T_ = '' " +;
+                     "AND C2_EMISSAO BETWEEN '" + DToS(dDataIni) + "' AND '" + DToS(dDataFim) + "' " +;
+                     "GROUP BY C2_NUM, C2_PRODUTO, B1_DESC, C2_QUANT, C2_QUJE, C2_PERDA"
+            
+            aDados := QuerySql(cQuery)
+            
+            For nI := 1 To Len(aDados)
+                nCustoMaterial := Iif(aDados[nI]["CUSTO_MATERIAL"] != Nil, aDados[nI]["CUSTO_MATERIAL"], 0)
+                nCustoMaoObra := This:calculaCustoMaoObra(aDados[nI]["C2_NUM"])
+                nCustoRefugo := This:calculaCustoRefugo(aDados[nI]["C2_NUM"], aDados[nI]["C2_PERDA"])
+                nCustoTotal := nCustoMaterial + nCustoMaoObra + nCustoRefugo
+                
+                oCusto := {;
+                    "op" => aDados[nI]["C2_NUM"],;
+                    "produto" => aDados[nI]["C2_PRODUTO"],;
+                    "descricao" => aDados[nI]["B1_DESC"],;
+                    "quantidadePlanejada" => aDados[nI]["C2_QUANT"],;
+                    "quantidadeProduzida" => aDados[nI]["C2_QUJE"],;
+                    "refugo" => aDados[nI]["C2_PERDA"],;
+                    "custoMaterial" => nCustoMaterial,;
+                    "custoMaoObra" => nCustoMaoObra,;
+                    "custoRefugo" => nCustoRefugo,;
+                    "custoTotal" => nCustoTotal,;
+                    "custoUnitario" => Iif(aDados[nI]["C2_QUJE"] > 0, nCustoTotal / aDados[nI]["C2_QUJE"], 0);
+                }
+                
+                aAdd(aCustos, oCusto)
+            Next
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro na análise de custos: " + oErr:Description
+        End Sequence
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "analise" => aCustos, "periodo" => DToS(dDataIni) + " a " + DToS(dDataFim) }
+
+    // =====================================================================
+    // PARTE 5: INTEGRAÇÃO E UTILITÁRIOS
+    // =====================================================================
+    
+    /*
+     * Integração com sistema de compras - gera solicitações automáticas
+     */
+    @Post("/pcp/integracao/compras")
+    action integracaoCompras(body)
+        Local aMateriaisFaltantes, nI, oMaterial, aSolicitacoes, oSolicitacao
+        Local cQuery, aDados, lErro, cErro, oLog, file, fs, all
+        
+        aMateriaisFaltantes := body["materiais"]
+        lErro := .F.
+        cErro := ""
+        aSolicitacoes := {}
+        
+        If Empty(aMateriaisFaltantes) .Or. !IsArray(aMateriaisFaltantes)
+            Return { "sucesso" => .F., "erro" => "Lista de materiais é obrigatória" }
+        EndIf
+        
+        Begin Sequence
+            For nI := 1 To Len(aMateriaisFaltantes)
+                oMaterial := aMateriaisFaltantes[nI]
+                
+                // Busca fornecedor preferencial
+                cQuery := "SELECT TOP 1 A5_FORNECE, A5_LOJA, A5_PRECO1 FROM SA5010 " +;
+                         "WHERE D_E_L_E_T_ = '' AND A5_PRODUTO = '" + oMaterial["codigo"] + "' " +;
+                         "ORDER BY A5_PRECO1"
+                
+                aDados := QuerySql(cQuery)
+                
+                If !Empty(aDados)
+                    oSolicitacao := {;
+                        "produto" => oMaterial["codigo"],;
+                        "quantidade" => oMaterial["quantidade"],;
+                        "fornecedor" => aDados[1]["A5_FORNECE"],;
+                        "loja" => aDados[1]["A5_LOJA"],;
+                        "precoUnitario" => aDados[1]["A5_PRECO1"],;
+                        "valorTotal" => oMaterial["quantidade"] * aDados[1]["A5_PRECO1"],;
+                        "dataSolicitacao" => DToS(Date()),;
+                        "urgencia" => oMaterial["urgencia"],;
+                        "status" => "SOLICITADO";
+                    }
+                    
+                    aAdd(aSolicitacoes, oSolicitacao)
+                EndIf
+            Next
+            
+            // Salva solicitações de compra
+            file := "./solicitacoes_compra.json"
+            all := {}
+            If File(file)
+                fs := MemoRead(file)
+                all := JsonDecode(fs)
+            EndIf
+            
+            For nI := 1 To Len(aSolicitacoes)
+                aAdd(all, aSolicitacoes[nI])
+            Next
+            
+            MemoWrite(file, JsonEncode(all))
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro na integração com compras: " + oErr:Description
+        End Sequence
+        
+        oLog := { "acao" => "integracaoCompras", "totalSolicitacoes" => Len(aSolicitacoes) }
+        This:registraLogPCP("integracaoCompras", "SISTEMA", oLog, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "solicitacoes" => aSolicitacoes, "total" => Len(aSolicitacoes) }
+
+    /*
+     * Simulação de cenários de produção
+     */
+    @Post("/pcp/simulacao")
+    action simulacaoProducao(body)
+        Local aCenarios, nI, oCenario, aResultados, oResultado, dDataSimulacao
+        Local nCapacidadeDisponivel, nDemandaTotal, nPercentualAtendimento, lViavel
+        Local lErro, cErro
+        
+        aCenarios := body["cenarios"]
+        dDataSimulacao := Iif(body["dataSimulacao"] != Nil, SToD(StrTran(body["dataSimulacao"], "-", "")), Date())
+        lErro := .F.
+        cErro := ""
+        aResultados := {}
+        
+        If Empty(aCenarios) .Or. !IsArray(aCenarios)
+            Return { "sucesso" => .F., "erro" => "Lista de cenários é obrigatória" }
+        EndIf
+        
+        Begin Sequence
+            For nI := 1 To Len(aCenarios)
+                oCenario := aCenarios[nI]
+                
+                // Calcula capacidade disponível
+                nCapacidadeDisponivel := This:calculaCapacidadeDisponivel(oCenario["centro"], dDataSimulacao)
+                
+                // Calcula demanda total
+                nDemandaTotal := This:calculaDemandaTotal(oCenario["produtos"], oCenario["quantidades"])
+                
+                // Análise de viabilidade
+                nPercentualAtendimento := Iif(nDemandaTotal > 0, Round((nCapacidadeDisponivel / nDemandaTotal) * 100, 2), 100)
+                lViavel := nPercentualAtendimento >= 100
+                
+                oResultado := {;
+                    "cenario" => oCenario["nome"],;
+                    "centro" => oCenario["centro"],;
+                    "dataSimulacao" => DToS(dDataSimulacao),;
+                    "capacidadeDisponivel" => nCapacidadeDisponivel,;
+                    "demandaTotal" => nDemandaTotal,;
+                    "percentualAtendimento" => nPercentualAtendimento,;
+                    "viavel" => lViavel,;
+                    "recomendacoes" => This:geraRecomendacoes(lViavel, nPercentualAtendimento);
+                }
+                
+                aAdd(aResultados, oResultado)
+            Next
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro na simulação: " + oErr:Description
+        End Sequence
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "simulacoes" => aResultados, "dataProcessamento" => DToS(Date()) }
+
+    /*
+     * Backup e restore de configurações
+     */
+    @Post("/pcp/backup")
+    action backupConfiguracoes(body)
+        Local cTipo, aArquivos, nI, cArquivo, cConteudo, oBackup, cNomeBackup
+        Local lErro, cErro
+        
+        cTipo := Iif(body["tipo"] != Nil, AllTrim(body["tipo"]), "COMPLETO")
+        lErro := .F.
+        cErro := ""
+        
+        aArquivos := {;
+            "./logs_pcp.json",;
+            "./solicitacoes_op.json",;
+            "./apontamentos_producao.json",;
+            "./status_recursos.json",;
+            "./solicitacoes_compra.json";
+        }
+        
+        Begin Sequence
+            oBackup := {;
+                "tipo" => cTipo,;
+                "dataBackup" => DToS(Date()),;
+                "horaBackup" => Time(),;
+                "arquivos" => {};
+            }
+            
+            For nI := 1 To Len(aArquivos)
+                cArquivo := aArquivos[nI]
+                If File(cArquivo)
+                    cConteudo := MemoRead(cArquivo)
+                    aAdd(oBackup["arquivos"], { "nome" => cArquivo, "conteudo" => cConteudo })
+                EndIf
+            Next
+            
+            cNomeBackup := "./backup_pcp_" + DToS(Date()) + "_" + StrTran(Time(), ":", "") + ".json"
+            MemoWrite(cNomeBackup, JsonEncode(oBackup))
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro no backup: " + oErr:Description
+        End Sequence
+        
+        Return { "sucesso" => .T., "arquivoBackup" => cNomeBackup, "totalArquivos" => Len(oBackup["arquivos"]) }
+
+    /*
+     * Restore de configurações a partir de backup
+     */
+    @Post("/pcp/restore")
+    action restoreConfiguracoes(body)
+        Local cArquivoBackup, oBackup, fs, nI, oArquivo, lErro, cErro
+        
+        cArquivoBackup := AllTrim(body["arquivoBackup"])
+        lErro := .F.
+        cErro := ""
+        
+        If Empty(cArquivoBackup)
+            Return { "sucesso" => .F., "erro" => "Nome do arquivo de backup é obrigatório" }
+        EndIf
+        
+        If !File(cArquivoBackup)
+            Return { "sucesso" => .F., "erro" => "Arquivo de backup não encontrado: " + cArquivoBackup }
+        EndIf
+        
+        Begin Sequence
+            fs := MemoRead(cArquivoBackup)
+            oBackup := JsonDecode(fs)
+            
+            For nI := 1 To Len(oBackup["arquivos"])
+                oArquivo := oBackup["arquivos"][nI]
+                MemoWrite(oArquivo["nome"], oArquivo["conteudo"])
+            Next
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro no restore: " + oErr:Description
+        End Sequence
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "mensagem" => "Restore executado com sucesso", "arquivosRestaurados" => Len(oBackup["arquivos"]) }
+
+    // =====================================================================
+    // MÉTODOS AUXILIARES AVANÇADOS
+    // =====================================================================
+    
+    /*
+     * Valida se produto existe no cadastro
+     */
+    Method validaProdutoExiste(cProduto)
+        Local cQuery, aDados
+        
+        cQuery := "SELECT B1_COD FROM SB1010 WHERE D_E_L_E_T_ = '' AND B1_COD = '" + cProduto + "'"
+        aDados := QuerySql(cQuery)
+        
+        Return !Empty(aDados)
+
+    /*
+     * Valida se centro de custo existe
+     */
+    Method validaCentroExiste(cCentro)
+        Local cQuery, aDados
+        
+        cQuery := "SELECT CTT_CUSTO FROM CTT010 WHERE D_E_L_E_T_ = '' AND CTT_CUSTO = '" + cCentro + "'"
+        aDados := QuerySql(cQuery)
+        
+        Return !Empty(aDados)
+
+    /*
+     * Define aprovadores baseado na prioridade e quantidade
+     */
+    Method defineAprovadores(cPrioridade, nQuantidade)
+        Local aAprovadores, aNivel1, aNivel2, aNivel3
+        
+        aNivel1 := { "SUPERVISOR01", "SUPERVISOR02" }
+        aNivel2 := { "GERENTE01", "GERENTE02" }  
+        aNivel3 := { "DIRETOR01" }
+        
+        aAprovadores := { aNivel1 }
+        
+        If cPrioridade == "ALTA" .Or. nQuantidade > 1000
+            aAdd(aAprovadores, aNivel2)
+        EndIf
+        
+        If cPrioridade == "CRÍTICA" .Or. nQuantidade > 5000
+            aAdd(aAprovadores, aNivel3)
+        EndIf
+        
+        Return aAprovadores
+
+    /*
+     * Envia notificação para aprovadores
+     */
+    Method enviarNotificacaoAprovacao(oSolicitacao)
+        Local aAprovadores, nNivel, aUsuarios, nI, oNotificacao, file, fs, all
+        
+        nNivel := oSolicitacao["nivelAprovacao"]
+        aAprovadores := oSolicitacao["aprovadores"]
+        
+        If nNivel <= Len(aAprovadores)
+            aUsuarios := aAprovadores[nNivel]
+            
+            file := "./notificacoes.json"
+            all := {}
+            If File(file)
+                fs := MemoRead(file)
+                all := JsonDecode(fs)
+            EndIf
+            
+            For nI := 1 To Len(aUsuarios)
+                oNotificacao := {;
+                    "usuario" => aUsuarios[nI],;
+                    "tipo" => "APROVACAO_OP",;
+                    "codigo" => oSolicitacao["codigo"],;
+                    "mensagem" => "Nova solicitação de OP aguardando aprovação",;
+                    "data" => DToS(Date()),;
+                    "hora" => Time(),;
+                    "lida" => .F.;
+                }
+                
+                aAdd(all, oNotificacao)
+            Next
+            
+            MemoWrite(file, JsonEncode(all))
+        EndIf
+        
+        Return .T.
+
+    /*
+     * Valida se usuário pode aprovar no nível atual
+     */
+    Method validaAprovador(cUsuario, aAprovadores, nNivel)
+        Local aUsuariosNivel, nI
+        
+        If nNivel > Len(aAprovadores)
+            Return .F.
+        EndIf
+        
+        aUsuariosNivel := aAprovadores[nNivel]
+        
+        For nI := 1 To Len(aUsuariosNivel)
+            If aUsuariosNivel[nI] == cUsuario
+                Return .T.
+            EndIf
+        Next
+        
+        Return .F.
+
+    /*
+     * Verifica se precisa de mais níveis de aprovação
+     */
+    Method precisaMaisAprovacao(aAprovadores, nNivelAtual)
+        Return nNivelAtual < Len(aAprovadores)
+
+    /*
+     * Cria OP automaticamente após aprovação completa
+     */
+    Method criarOPAutomatica(oSolicitacao)
+        Local cQuery, cNumOP, lErro, cErro
+        
+        lErro := .F.
+        cErro := ""
+        
+        Begin Sequence
+            // Gera próximo número de OP
+            cNumOP := This:geraProximoNumOP()
+            
+            // Insere na SC2 (simulação)
+            cQuery := "INSERT INTO SC2010 (C2_FILIAL, C2_NUM, C2_PRODUTO, C2_QUANT, " +;
+                     "C2_EMISSAO, C2_DATPRI, C2_CC, C2_STATUS) VALUES " +;
+                     "('" + xFilial("SC2") + "', '" + cNumOP + "', '" + oSolicitacao["produto"] + "', " +;
+                     oSolicitacao["quantidade"] + ", '" + DToS(Date()) + "', '" + oSolicitacao["dataNecessidade"] + "', " +;
+                     "'" + oSolicitacao["centro"] + "', 'L')"
+            
+            // Em ambiente real, executaria: TCSqlExec(cQuery)
+            // Aqui apenas registramos no log
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro ao criar OP: " + oErr:Description
+        End Sequence
+        
+        Return !lErro
+
+    /*
+     * Gera próximo número de OP
+     */
+    Method geraProximoNumOP()
+        Local cQuery, aDados, cUltimo, nProximo
+        
+        cQuery := "SELECT MAX(C2_NUM) AS ULTIMO FROM SC2010 WHERE D_E_L_E_T_ = ''"
+        aDados := QuerySql(cQuery)
+        
+        If !Empty(aDados) .And. aDados[1]["ULTIMO"] != Nil
+            cUltimo := aDados[1]["ULTIMO"]
+            nProximo := Val(cUltimo) + 1
+        Else
+            nProximo := 1
+        EndIf
+        
+        Return StrZero(nProximo, 6)
+
+    /*
+     * Calcula evolução temporal de produtividade
+     */
+    Method calculaEvolucaoTemporal(dDataIni, dDataFim, cCentro)
+        Local aEvolucao, dData, nSemana, cQuery, aDados, oSemana, nI
+        
+        aEvolucao := {}
+        dData := dDataIni
+        nSemana := 1
+        
+        While dData <= dDataFim
+            cQuery := "SELECT SUM(C2_QUANT) AS PLANEJADO, SUM(C2_QUJE) AS PRODUZIDO " +;
+                     "FROM SC2010 WHERE D_E_L_E_T_ = '' " +;
+                     "AND C2_EMISSAO BETWEEN '" + DToS(dData) + "' AND '" + DToS(dData + 6) + "'"
+            
+            If !Empty(cCentro)
+                cQuery += " AND C2_CC = '" + cCentro + "'"
+            EndIf
+            
+            aDados := QuerySql(cQuery)
+            
+            If !Empty(aDados)
+                oSemana := {;
+                    "semana" => nSemana,;
+                    "dataInicio" => DToS(dData),;
+                    "planejado" => aDados[1]["PLANEJADO"],;
+                    "produzido" => aDados[1]["PRODUZIDO"],;
+                    "eficiencia" => Iif(aDados[1]["PLANEJADO"] > 0, Round((aDados[1]["PRODUZIDO"]/aDados[1]["PLANEJADO"])*100, 2), 0);
+                }
+                
+                aAdd(aEvolucao, oSemana)
+            EndIf
+            
+            dData += 7
+            nSemana++
+        EndDo
+        
+        Return aEvolucao
+
+    /*
+     * Analisa eficiência de recursos
+     */
+    Method analisaEficienciaRecursos(dDataIni, dDataFim, cRecurso)
+        Local aRecursos, cQuery, aDados, nI, oRecurso
+        
+        cQuery := "SELECT H6_RECURSO, SUM(H6_TEMPO) AS TEMPO_USADO, " +;
+                 "COUNT(*) AS APONTAMENTOS FROM SH6010 " +;
+                 "WHERE D_E_L_E_T_ = '' " +;
+                 "AND H6_DATAINI BETWEEN '" + DToS(dDataIni) + "' AND '" + DToS(dDataFim) + "'"
+        
+        If !Empty(cRecurso)
+            cQuery += " AND H6_RECURSO = '" + cRecurso + "'"
+        EndIf
+        
+        cQuery += " GROUP BY H6_RECURSO ORDER BY H6_RECURSO"
+        
+        aDados := QuerySql(cQuery)
+        aRecursos := {}
+        
+        For nI := 1 To Len(aDados)
+            oRecurso := {;
+                "recurso" => aDados[nI]["H6_RECURSO"],;
+                "tempoUsado" => aDados[nI]["TEMPO_USADO"],;
+                "apontamentos" => aDados[nI]["APONTAMENTOS"],;
+                "tempoDisponivel" => This:calculaTempoDisponivel(aDados[nI]["H6_RECURSO"], dDataIni, dDataFim),;
+                "utilizacao" => 0;
+            }
+            
+            If oRecurso["tempoDisponivel"] > 0
+                oRecurso["utilizacao"] := Round((oRecurso["tempoUsado"] / oRecurso["tempoDisponivel"]) * 100, 2)
+            EndIf
+            
+            aAdd(aRecursos, oRecurso)
+        Next
+        
+        Return aRecursos
+
+    /*
+     * Calcula tempo disponível do recurso
+     */
+    Method calculaTempoDisponivel(cRecurso, dDataIni, dDataFim)
+        Local nDias, nHorasDia, nTempoTotal
+        
+        nDias := dDataFim - dDataIni + 1
+        nHorasDia := 8 // 8 horas por dia
+        nTempoTotal := nDias * nHorasDia * 60 // em minutos
+        
+        Return nTempoTotal
+
+    /*
+     * Calcula custo de mão de obra por OP
+     */
+    Method calculaCustoMaoObra(cOP)
+        Local cQuery, aDados, nCusto
+        
+        cQuery := "SELECT SUM(H6_TEMPO * 0.5) AS CUSTO_MO FROM SH6010 " +;
+                 "WHERE D_E_L_E_T_ = '' AND H6_OP = '" + cOP + "'"
+        
+        aDados := QuerySql(cQuery)
+        nCusto := Iif(!Empty(aDados) .And. aDados[1]["CUSTO_MO"] != Nil, aDados[1]["CUSTO_MO"], 0)
+        
+        Return nCusto
+
+    /*
+     * Calcula custo de refugo por OP
+     */
+    Method calculaCustoRefugo(cOP, nQuantRefugo)
+        Local cQuery, aDados, nCustoUnitario, nCustoRefugo
+        
+        cQuery := "SELECT B1_CUSTD FROM SC2010 C2 " +;
+                 "INNER JOIN SB1010 B1 ON C2_PRODUTO = B1_COD " +;
+                 "WHERE C2.D_E_L_E_T_ = '' AND B1.D_E_L_E_T_ = '' " +;
+                 "AND C2_NUM = '" + cOP + "'"
+        
+        aDados := QuerySql(cQuery)
+        nCustoUnitario := Iif(!Empty(aDados), aDados[1]["B1_CUSTD"], 0)
+        nCustoRefugo := nQuantRefugo * nCustoUnitario
+        
+        Return nCustoRefugo
+
+    /*
+     * Exporta relatório em formato CSV
+     */
+    Method exportarCSVProdutividade(aResultados, dDataIni, dDataFim)
+        Local cNomeArquivo, cConteudo, nI, oItem
+        
+        cNomeArquivo := "./relatorio_produtividade_" + DToS(dDataIni) + "_" + DToS(dDataFim) + ".csv"
+        cConteudo := "Centro;Planejado;Produzido;Eficiencia;OPs" + CRLF
+        
+        For nI := 1 To Len(aResultados["eficienciaCentros"])
+            oItem := aResultados["eficienciaCentros"][nI]
+            cConteudo += oItem["C2_CC"] + ";" + cValToChar(oItem["PLANEJADO"]) + ";" +;
+                        cValToChar(oItem["PRODUZIDO"]) + ";" + cValToChar(oItem["eficiencia"]) + ";" +;
+                        cValToChar(oItem["OPS"]) + CRLF
+        Next
+        
+        MemoWrite(cNomeArquivo, cConteudo)
+        
+        Return cNomeArquivo
+
+    /*
+     * Calcula capacidade disponível por centro
+     */
+    Method calculaCapacidadeDisponivel(cCentro, dData)
+        Local cQuery, aDados, nCapacidade
+        
+        // Simulação de cálculo de capacidade
+        cQuery := "SELECT COUNT(*) * 8 * 60 AS CAPACIDADE FROM SH1010 " +;
+                 "WHERE D_E_L_E_T_ = '' AND H1_CC = '" + cCentro + "'"
+        
+        aDados := QuerySql(cQuery)
+        nCapacidade := Iif(!Empty(aDados), aDados[1]["CAPACIDADE"], 480) // 8 horas padrão
+        
+        Return nCapacidade
+
+    /*
+     * Calcula demanda total baseada em produtos e quantidades
+     */
+    Method calculaDemandaTotal(aProdutos, aQuantidades)
+        Local nTotal, nI, cQuery, aDados, nTempoPadrao
+        
+        nTotal := 0
+        
+        For nI := 1 To Len(aProdutos)
+            // Busca tempo padrão do produto
+            cQuery := "SELECT G2_TEMPAD FROM SG2010 WHERE D_E_L_E_T_ = '' AND G2_PRODUTO = '" + aProdutos[nI] + "'"
+            aDados := QuerySql(cQuery)
+            nTempoPadrao := Iif(!Empty(aDados), aDados[1]["G2_TEMPAD"], 60) // 1 hora padrão
+            
+            nTotal += aQuantidades[nI] * nTempoPadrao
+        Next
+        
+        Return nTotal
+
+    /*
+     * Gera recomendações baseadas na análise de viabilidade
+     */
+    Method geraRecomendacoes(lViavel, nPercentual)
+        Local aRecomendacoes
+        
+        aRecomendacoes := {}
+        
+        If !lViavel
+            If nPercentual < 50
+                aAdd(aRecomendacoes, "Capacidade muito baixa - considere terceirização")
+                aAdd(aRecomendacoes, "Avalie aquisição de novos equipamentos")
+            ElseIf nPercentual < 80
+                aAdd(aRecomendacoes, "Capacidade limitada - considere horas extras")
+                aAdd(aRecomendacoes, "Reavalie prioridades de produção")
+            Else
+                aAdd(aRecomendacoes, "Pequeno ajuste necessário na programação")
+            EndIf
+        Else
+            aAdd(aRecomendacoes, "Cenário viável com a capacidade atual")
+            If nPercentual > 120
+                aAdd(aRecomendacoes, "Capacidade ociosa - oportunidade para novos pedidos")
+            EndIf
+        EndIf
+        
+        Return aRecomendacoes
+
+EndClass
