@@ -1,0 +1,348 @@
+/*
+ * =====================================================================
+ *  GESTAOPAVANCADO.TLPP
+ *  Sistema Avançado de Gestão de Ordens de Produção para Protheus PCP
+ *  Desenvolvido para uso corporativo, com robustez, performance e integração
+ *  Autor: Sistema PCP Avançado
+ *  Data: 2025-08-04
+ *  Descrição: Controle completo de OPs, materiais, apontamentos, workflow e análises
+ *  Versão: 1.0 - Parte 1: Consulta e Dashboard de OPs
+ * =====================================================================
+ */
+
+@Rest
+class GestaoOPAvancado {
+
+    // =====================================================================
+    // PARTE 1: CONSULTA AVANÇADA DE ORDENS DE PRODUÇÃO
+    // =====================================================================
+    
+    /*
+     * Consulta robusta de OPs com filtros avançados, paginação e validações
+     * Parâmetros: op, produto, status, dataIni, dataFim, centro, recurso, prioridade
+     * Retorna: lista paginada, totalizadores, logs e análises de performance
+     */
+    @Get("/pcp/ops/consulta")
+    action consultaOPs(params)
+        Local cOP, cProduto, cStatus, dDataIni, dDataFim, cCentro, cRecurso, cPrioridade
+        Local nPage, nPageSize, cOrderBy, cOrderDir, aWhere, cWhere, nOffset
+        Local cQuery, cCountQuery, aItens, aCount, nTotal, aEstatisticas, oLog
+        Local lErro, cErro, aDados, nI
+        
+        // Inicialização e validação de parâmetros
+        cOP         := AllTrim(Iif(!Empty(params["op"]), params["op"], ""))
+        cProduto    := AllTrim(Iif(!Empty(params["produto"]), params["produto"], ""))
+        cStatus     := AllTrim(Iif(!Empty(params["status"]), params["status"], ""))
+        dDataIni    := Iif(!Empty(params["dataIni"]), SToD(StrTran(params["dataIni"],"-","")), SToD(""))
+        dDataFim    := Iif(!Empty(params["dataFim"]), SToD(StrTran(params["dataFim"],"-","")), SToD(""))
+        cCentro     := AllTrim(Iif(!Empty(params["centro"]), params["centro"], ""))
+        cRecurso    := AllTrim(Iif(!Empty(params["recurso"]), params["recurso"], ""))
+        cPrioridade := AllTrim(Iif(!Empty(params["prioridade"]), params["prioridade"], ""))
+        nPage       := Iif(!Empty(params["page"]), Val(params["page"]), 1)
+        nPageSize   := Iif(!Empty(params["pageSize"]), Val(params["pageSize"]), 30)
+        cOrderBy    := Iif(!Empty(params["orderBy"]), params["orderBy"], "C2_NUM")
+        cOrderDir   := Iif(!Empty(params["orderDir"]), params["orderDir"], "DESC")
+        
+        // Validações de negócio
+        If nPageSize > 500
+            Return { "sucesso" => .F., "erro" => "Limite máximo de 500 registros por página." }
+        EndIf
+        If !Empty(dDataIni) .And. !Empty(dDataFim) .And. dDataFim < dDataIni
+            Return { "sucesso" => .F., "erro" => "Data final deve ser maior que data inicial." }
+        EndIf
+        
+        // Construção dinâmica do WHERE
+        aWhere := { "C2.D_E_L_E_T_ = ''" }
+        If !Empty(cOP)
+            aAdd(aWhere, "C2_NUM LIKE '%" + cOP + "%'")
+        EndIf
+        If !Empty(cProduto)
+            aAdd(aWhere, "C2_PRODUTO LIKE '%" + cProduto + "%'")
+        EndIf
+        If !Empty(cStatus)
+            aAdd(aWhere, "C2_TPOP = '" + cStatus + "'")
+        EndIf
+        If !Empty(dDataIni)
+            aAdd(aWhere, "C2_EMISSAO >= '" + DToS(dDataIni) + "'")
+        EndIf
+        If !Empty(dDataFim)
+            aAdd(aWhere, "C2_EMISSAO <= '" + DToS(dDataFim) + "'")
+        EndIf
+        If !Empty(cCentro)
+            aAdd(aWhere, "C2_CC = '" + cCentro + "'")
+        EndIf
+        If !Empty(cRecurso)
+            aAdd(aWhere, "C2_RECURSO = '" + cRecurso + "'")
+        EndIf
+        If !Empty(cPrioridade)
+            aAdd(aWhere, "C2_PRIOR = '" + cPrioridade + "'")
+        EndIf
+        
+        cWhere := ""
+        If Len(aWhere) > 0
+            cWhere := " WHERE " + ArrayToStr(aWhere, " AND ")
+        EndIf
+        
+        nOffset := (nPage - 1) * nPageSize
+        
+        // Query principal com JOINs para dados completos
+        cQuery := "SELECT C2_NUM, C2_ITEM, C2_SEQUEN, C2_PRODUTO, B1_DESC, C2_QUANT, " +;
+                 "C2_QUJE, C2_PERDA, C2_EMISSAO, C2_DATPRI, C2_DATPRF, C2_TPOP, " +;
+                 "C2_CC, C2_RECURSO, C2_PRIOR, C2_LOCAL, C2_OBS, " +;
+                 "CASE WHEN C2_QUJE >= C2_QUANT THEN 'FINALIZADA' " +;
+                 "     WHEN C2_QUJE > 0 THEN 'EM_ANDAMENTO' " +;
+                 "     ELSE 'PENDENTE' END AS STATUS_CALC " +;
+                 "FROM SC2010 C2 " +;
+                 "LEFT JOIN SB1010 B1 ON C2_PRODUTO = B1_COD AND B1.D_E_L_E_T_ = '' " +;
+                 cWhere + " " +;
+                 "ORDER BY " + cOrderBy + " " + cOrderDir + " " +;
+                 "OFFSET " + AllTrim(Str(nOffset)) + " ROWS FETCH NEXT " + AllTrim(Str(nPageSize)) + " ROWS ONLY"
+        
+        // Query de contagem
+        cCountQuery := "SELECT COUNT(*) AS TOTAL FROM SC2010 C2 " + cWhere
+        
+        // Inicialização de controle de erro e log
+        lErro := .F.
+        cErro := ""
+        oLog := { "acao" => "consultaOPs", "parametros" => params, "data" => DToS(Date()), "hora" => Time() }
+        aEstatisticas := {}
+        
+        // Execução com tratamento de erro
+        Begin Sequence
+            aItens := QuerySql(cQuery)
+            aCount := QuerySql(cCountQuery)
+            nTotal := Iif(!Empty(aCount), aCount[1]["TOTAL"], 0)
+            
+            // Cálculo de estatísticas adicionais
+            aEstatisticas := This:calculaEstatisticasOPs(aItens)
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro na consulta: " + oErr:Description
+            aItens := {}
+            nTotal := 0
+        End Sequence
+        
+        // Log da operação
+        This:registraLogPCP("consultaOPs", "API", oLog, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro, "dados" => {}, "total" => 0, "page" => nPage, "pageSize" => nPageSize }
+        EndIf
+        
+        Return { "sucesso" => .T., "dados" => aItens, "total" => nTotal, "page" => nPage, "pageSize" => nPageSize, "estatisticas" => aEstatisticas }
+
+    // =====================================================================
+    // DASHBOARD EXECUTIVO DE PRODUÇÃO
+    // =====================================================================
+    
+    /*
+     * Dashboard com KPIs, gráficos e análises de produção em tempo real
+     * Calcula indicadores de performance, gargalos e tendências
+     */
+    @Get("/pcp/dashboard")
+    action dashboardProducao(params)
+        Local nTotalOPs, nOPsPendentes, nOPsAndamento, nOPsFinalizadas, nOPsAtrasadas
+        Local nPercentualConclusao, nMediaDiasProduzir, aGargalos, aProdutividadeCentros
+        Local aPrioridadeCritica, aEvolucaoMensal, aTop10Produtos, aIndicadores
+        Local cQuery, aDados, nI, dHoje, nDias, cCentro, nQtdAtrasada
+        Local nPerformanceGeral, aCurvaABC, aMateriais, lErro, cErro
+        
+        dHoje := Date()
+        nDias := Iif(!Empty(params["periodo"]), Val(params["periodo"]), 30)
+        lErro := .F.
+        cErro := ""
+        
+        Begin Sequence
+            // KPI 1: Total de OPs ativas
+            cQuery := "SELECT COUNT(*) AS TOTAL FROM SC2010 WHERE D_E_L_E_T_ = '' AND C2_TPOP <> 'S'"
+            aDados := QuerySql(cQuery)
+            nTotalOPs := Iif(!Empty(aDados), aDados[1]["TOTAL"], 0)
+            
+            // KPI 2: OPs por status
+            cQuery := "SELECT " +;
+                     "SUM(CASE WHEN C2_QUJE = 0 THEN 1 ELSE 0 END) AS PENDENTES, " +;
+                     "SUM(CASE WHEN C2_QUJE > 0 AND C2_QUJE < C2_QUANT THEN 1 ELSE 0 END) AS ANDAMENTO, " +;
+                     "SUM(CASE WHEN C2_QUJE >= C2_QUANT THEN 1 ELSE 0 END) AS FINALIZADAS " +;
+                     "FROM SC2010 WHERE D_E_L_E_T_ = '' AND C2_TPOP <> 'S'"
+            aDados := QuerySql(cQuery)
+            If !Empty(aDados)
+                nOPsPendentes := aDados[1]["PENDENTES"]
+                nOPsAndamento := aDados[1]["ANDAMENTO"]
+                nOPsFinalizadas := aDados[1]["FINALIZADAS"]
+            Else
+                nOPsPendentes := nOPsAndamento := nOPsFinalizadas := 0
+            EndIf
+            
+            // KPI 3: OPs atrasadas
+            cQuery := "SELECT COUNT(*) AS ATRASADAS FROM SC2010 " +;
+                     "WHERE D_E_L_E_T_ = '' AND C2_TPOP <> 'S' AND C2_DATPRF < '" + DToS(dHoje) + "' AND C2_QUJE < C2_QUANT"
+            aDados := QuerySql(cQuery)
+            nOPsAtrasadas := Iif(!Empty(aDados), aDados[1]["ATRASADAS"], 0)
+            
+            // KPI 4: Percentual de conclusão geral
+            nPercentualConclusao := Iif(nTotalOPs > 0, Round((nOPsFinalizadas / nTotalOPs) * 100, 2), 0)
+            
+            // KPI 5: Análise de gargalos por centro de custo
+            cQuery := "SELECT C2_CC, COUNT(*) AS QTD_OPS, " +;
+                     "AVG(DATEDIFF(day, CONVERT(date, C2_DATPRI), CONVERT(date, C2_DATPRF))) AS DIAS_MEDIO " +;
+                     "FROM SC2010 WHERE D_E_L_E_T_ = '' AND C2_TPOP <> 'S' " +;
+                     "GROUP BY C2_CC ORDER BY QTD_OPS DESC"
+            aGargalos := QuerySql(cQuery)
+            
+            // KPI 6: Produtividade por centro
+            cQuery := "SELECT C2_CC, SUM(C2_QUJE) AS PRODUZIDO, SUM(C2_QUANT) AS PLANEJADO " +;
+                     "FROM SC2010 WHERE D_E_L_E_T_ = '' AND C2_EMISSAO >= '" + DToS(dHoje - nDias) + "' " +;
+                     "GROUP BY C2_CC ORDER BY PRODUZIDO DESC"
+            aProdutividadeCentros := QuerySql(cQuery)
+            
+            // KPI 7: OPs de prioridade crítica
+            cQuery := "SELECT C2_NUM, C2_PRODUTO, B1_DESC, C2_QUANT, C2_QUJE, C2_DATPRF " +;
+                     "FROM SC2010 C2 LEFT JOIN SB1010 B1 ON C2_PRODUTO = B1_COD AND B1.D_E_L_E_T_ = '' " +;
+                     "WHERE C2.D_E_L_E_T_ = '' AND C2_PRIOR = '1' AND C2_QUJE < C2_QUANT " +;
+                     "ORDER BY C2_DATPRF"
+            aPrioridadeCritica := QuerySql(cQuery)
+            
+            // KPI 8: Top 10 produtos mais produzidos
+            cQuery := "SELECT TOP 10 C2_PRODUTO, B1_DESC, SUM(C2_QUJE) AS TOTAL_PRODUZIDO " +;
+                     "FROM SC2010 C2 LEFT JOIN SB1010 B1 ON C2_PRODUTO = B1_COD AND B1.D_E_L_E_T_ = '' " +;
+                     "WHERE C2.D_E_L_E_T_ = '' AND C2_EMISSAO >= '" + DToS(dHoje - nDias) + "' " +;
+                     "GROUP BY C2_PRODUTO, B1_DESC ORDER BY TOTAL_PRODUZIDO DESC"
+            aTop10Produtos := QuerySql(cQuery)
+            
+            // Performance geral (OEE simplificado)
+            nPerformanceGeral := This:calculaOEESimplificado()
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro ao gerar dashboard: " + oErr:Description
+        End Sequence
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        // Montagem do retorno estruturado
+        aIndicadores := {;
+            "totalOPs" => nTotalOPs,;
+            "pendentes" => nOPsPendentes,;
+            "emAndamento" => nOPsAndamento,;
+            "finalizadas" => nOPsFinalizadas,;
+            "atrasadas" => nOPsAtrasadas,;
+            "percentualConclusao" => nPercentualConclusao,;
+            "performanceGeral" => nPerformanceGeral;
+        }
+        
+        This:registraLogPCP("dashboardProducao", "API", { "periodo" => nDias }, .T.)
+        
+        Return {;
+            "sucesso" => .T.,;
+            "indicadores" => aIndicadores,;
+            "gargalos" => aGargalos,;
+            "produtividadeCentros" => aProdutividadeCentros,;
+            "prioridadeCritica" => aPrioridadeCritica,;
+            "top10Produtos" => aTop10Produtos,;
+            "dataAtualizacao" => DToS(Date()) + " " + Time();
+        }
+
+    // =====================================================================
+    // FUNÇÕES AUXILIARES DA PARTE 1
+    // =====================================================================
+    
+    /*
+     * Calcula estatísticas detalhadas das OPs consultadas
+     */
+    calculaEstatisticasOPs(aItens)
+        Local aStats, nI, nTotalPlanejado, nTotalProduzido, nTotalPerda
+        Local nOPsNovaas, nOPsVencidas, dItem
+        
+        nTotalPlanejado := nTotalProduzido := nTotalPerda := 0
+        nOPsNovaas := nOPsVencidas := 0
+        
+        For nI := 1 To Len(aItens)
+            nTotalPlanejado += aItens[nI]["C2_QUANT"]
+            nTotalProduzido += aItens[nI]["C2_QUJE"]
+            nTotalPerda += aItens[nI]["C2_PERDA"]
+            
+            dItem := SToD(aItens[nI]["C2_EMISSAO"])
+            If dItem >= (Date() - 7)
+                nOPsNovaas++
+            EndIf
+            
+            dItem := SToD(aItens[nI]["C2_DATPRF"])
+            If dItem < Date() .And. aItens[nI]["C2_QUJE"] < aItens[nI]["C2_QUANT"]
+                nOPsVencidas++
+            EndIf
+        Next
+        
+        aStats := {;
+            "totalPlanejado" => nTotalPlanejado,;
+            "totalProduzido" => nTotalProduzido,;
+            "totalPerda" => nTotalPerda,;
+            "eficiencia" => Iif(nTotalPlanejado > 0, Round((nTotalProduzido/nTotalPlanejado)*100, 2), 0),;
+            "opsNovas" => nOPsNovaas,;
+            "opsVencidas" => nOPsVencidas;
+        }
+        
+        Return aStats
+
+    /*
+     * Cálculo simplificado de OEE (Overall Equipment Effectiveness)
+     */
+    calculaOEESimplificado()
+        Local cQuery, aDados, nDisponibilidade, nPerformance, nQualidade, nOEE
+        
+        // Simplificação: usar dados das últimas 4 semanas
+        cQuery := "SELECT " +;
+                 "AVG(CASE WHEN C2_QUJE >= C2_QUANT THEN 100.0 ELSE (C2_QUJE/C2_QUANT)*100.0 END) AS PERFORMANCE, " +;
+                 "AVG(CASE WHEN C2_PERDA = 0 THEN 100.0 ELSE ((C2_QUJE-C2_PERDA)/C2_QUJE)*100.0 END) AS QUALIDADE " +;
+                 "FROM SC2010 WHERE D_E_L_E_T_ = '' AND C2_EMISSAO >= '" + DToS(Date() - 28) + "'"
+        
+        aDados := QuerySql(cQuery)
+        If !Empty(aDados)
+            nDisponibilidade := 85  // Valor padrão estimado
+            nPerformance := Iif(aDados[1]["PERFORMANCE"] != Nil, aDados[1]["PERFORMANCE"], 0)
+            nQualidade := Iif(aDados[1]["QUALIDADE"] != Nil, aDados[1]["QUALIDADE"], 0)
+            nOEE := Round((nDisponibilidade * nPerformance * nQualidade) / 10000, 2)
+        Else
+            nOEE := 0
+        EndIf
+        
+        Return nOEE
+
+    /*
+     * Registra logs específicos do módulo PCP
+     */
+    registraLogPCP(cAcao, cUsuario, oDetalhes, lSucesso)
+        Local file, fs, all, oLog
+        
+        file := "./logs_pcp.json"
+        all := {}
+        
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+        EndIf
+        
+        oLog := {;
+            "acao" => cAcao,;
+            "usuario" => cUsuario,;
+            "detalhes" => oDetalhes,;
+            "sucesso" => lSucesso,;
+            "data" => DToS(Date()),;
+            "hora" => Time(),;
+            "timestamp" => FWTimeStamp(3);
+        }
+        
+        aAdd(all, oLog)
+        
+        // Manter apenas os últimos 1000 logs
+        If Len(all) > 1000
+            aDel(all, 1)
+            aSize(all, 999)
+        EndIf
+        
+        MemoWrite(file, JsonEncode(all))
+        
+        Return .T.
+}
