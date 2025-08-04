@@ -6,7 +6,7 @@
  *  Autor: Sistema PCP Avançado
  *  Data: 2025-08-04
  *  Descrição: Controle completo de OPs, materiais, apontamentos, workflow e análises
- *  Versão: 1.0 - Parte 1: Consulta e Dashboard de OPs
+ *  Versão: 1.0 - Partes 1 e 2: Consulta, Dashboard, Materiais e Apontamentos
  * =====================================================================
  */
 
@@ -343,6 +343,696 @@ class GestaoOPAvancado {
         EndIf
         
         MemoWrite(file, JsonEncode(all))
+        
+        Return .T.
+
+    // =====================================================================
+    // PARTE 2: CONTROLE DE MATERIAIS E APONTAMENTOS DE PRODUÇÃO
+    // =====================================================================
+    
+    /*
+     * Consulta detalhada de materiais necessários para uma OP
+     * Inclui saldo disponível, reservas, empenhos e sugestões de compra
+     */
+    @Get("/pcp/op/:numero/materiais")
+    action consultaMateriaisOP(params)
+        Local cNumOP, cQuery, aMateriaisOP, aMateriais, nI, oMaterial
+        Local nSaldoDisponivel, nReservado, nEmpenhado, nNecessario, cStatus
+        Local aFornecedores, aSugestoes, lErro, cErro, oLog
+        
+        cNumOP := AllTrim(params["numero"])
+        lErro := .F.
+        cErro := ""
+        aMateriais := {}
+        aSugestoes := {}
+        
+        If Empty(cNumOP)
+            Return { "sucesso" => .F., "erro" => "Número da OP é obrigatório." }
+        EndIf
+        
+        oLog := { "acao" => "consultaMateriaisOP", "op" => cNumOP, "data" => DToS(Date()), "hora" => Time() }
+        
+        Begin Sequence
+            // Busca estrutura de materiais da OP
+            cQuery := "SELECT G1_COD, G1_COMP, B1_DESC, G1_QUANT, G1_PERDA, G1_REVINI, G1_REVFIM, " +;
+                     "G1_INI, G1_FIM, G1_FIXVAR, G1_GROPC, G1_OPC " +;
+                     "FROM SG1010 G1 " +;
+                     "INNER JOIN SB1010 B1 ON G1_COMP = B1_COD AND B1.D_E_L_E_T_ = '' " +;
+                     "INNER JOIN SC2010 C2 ON G1_COD = C2_PRODUTO AND C2.D_E_L_E_T_ = '' " +;
+                     "WHERE G1.D_E_L_E_T_ = '' AND C2_NUM = '" + cNumOP + "' " +;
+                     "ORDER BY G1_TRT"
+            aMateriaisOP := QuerySql(cQuery)
+            
+            For nI := 1 To Len(aMateriaisOP)
+                // Calcula necessidade real baseada na quantidade da OP
+                cQuery := "SELECT C2_QUANT, C2_QUJE FROM SC2010 WHERE D_E_L_E_T_ = '' AND C2_NUM = '" + cNumOP + "'"
+                aDados := QuerySql(cQuery)
+                nNecessario := Iif(!Empty(aDados), (aDados[1]["C2_QUANT"] - aDados[1]["C2_QUJE"]) * aMateriaisOP[nI]["G1_QUANT"], 0)
+                
+                // Verifica saldo disponível
+                cQuery := "SELECT SUM(B2_QATU) AS SALDO FROM SB2010 " +;
+                         "WHERE D_E_L_E_T_ = '' AND B2_COD = '" + aMateriaisOP[nI]["G1_COMP"] + "'"
+                aDados := QuerySql(cQuery)
+                nSaldoDisponivel := Iif(!Empty(aDados), aDados[1]["SALDO"], 0)
+                
+                // Verifica empenhos existentes
+                cQuery := "SELECT SUM(D4_QUANT - D4_QTDEENT) AS EMPENHADO FROM SD4010 " +;
+                         "WHERE D_E_L_E_T_ = '' AND D4_COD = '" + aMateriaisOP[nI]["G1_COMP"] + "' AND D4_OP = '" + cNumOP + "'"
+                aDados := QuerySql(cQuery)
+                nEmpenhado := Iif(!Empty(aDados), aDados[1]["EMPENHADO"], 0)
+                
+                // Define status do material
+                If nSaldoDisponivel >= nNecessario
+                    cStatus := "DISPONIVEL"
+                ElseIf nSaldoDisponivel > 0
+                    cStatus := "PARCIAL"
+                Else
+                    cStatus := "INDISPONIVEL"
+                EndIf
+                
+                // Busca fornecedores preferenciais
+                aFornecedores := This:buscaFornecedoresPreferenciais(aMateriaisOP[nI]["G1_COMP"])
+                
+                oMaterial := {;
+                    "codigo" => aMateriaisOP[nI]["G1_COMP"],;
+                    "descricao" => aMateriaisOP[nI]["B1_DESC"],;
+                    "quantidadeNecessaria" => nNecessario,;
+                    "saldoDisponivel" => nSaldoDisponivel,;
+                    "quantidadeEmpenhada" => nEmpenhado,;
+                    "quantidadeFaltante" => Max(0, nNecessario - nSaldoDisponivel),;
+                    "status" => cStatus,;
+                    "fornecedores" => aFornecedores,;
+                    "perda" => aMateriaisOP[nI]["G1_PERDA"];
+                }
+                
+                aAdd(aMateriais, oMaterial)
+                
+                // Gera sugestões de compra para materiais em falta
+                If nSaldoDisponivel < nNecessario
+                    aAdd(aSugestoes, This:geraSugestaoCompra(aMateriaisOP[nI]["G1_COMP"], nNecessario - nSaldoDisponivel, aFornecedores))
+                EndIf
+            Next
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro ao consultar materiais da OP: " + oErr:Description
+        End Sequence
+        
+        This:registraLogPCP("consultaMateriaisOP", "API", oLog, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return {;
+            "sucesso" => .T.,;
+            "op" => cNumOP,;
+            "materiais" => aMateriais,;
+            "totalMateriais" => Len(aMateriais),;
+            "sugestoesCompra" => aSugestoes;
+        }
+
+    /*
+     * Realiza apontamento de produção com validações robustas
+     * Controla quantidade produzida, refugo, tempo de produção e recursos
+     */
+    @Post("/pcp/op/apontamento")
+    action apontamentoProducao(body)
+        Local cNumOP, cItem, cSequencia, nQuantidade, nRefugo, cRecurso, cOperador
+        Local dDataIni, cHoraIni, dDataFim, cHoraFim, cObservacoes, nTempoSetup, nTempoProducao
+        Local cQuery, aDados, nQtdPlanejada, nQtdJaProduzida, nQtdDisponivel, lOk
+        Local lErro, cErro, oLog, aValidacoes, nIndice, cMsgValidacao
+        
+        // Extração e validação de parâmetros
+        cNumOP        := AllTrim(body["numeroOP"])
+        cItem         := AllTrim(body["item"])
+        cSequencia    := AllTrim(body["sequencia"])
+        nQuantidade   := Val(body["quantidade"])
+        nRefugo       := Val(Iif(body["refugo"] != Nil, body["refugo"], "0"))
+        cRecurso      := AllTrim(body["recurso"])
+        cOperador     := AllTrim(body["operador"])
+        dDataIni      := SToD(StrTran(body["dataInicio"], "-", ""))
+        cHoraIni      := body["horaInicio"]
+        dDataFim      := SToD(StrTran(body["dataFim"], "-", ""))
+        cHoraFim      := body["horaFim"]
+        cObservacoes  := body["observacoes"]
+        nTempoSetup   := Val(Iif(body["tempoSetup"] != Nil, body["tempoSetup"], "0"))
+        nTempoProducao:= Val(Iif(body["tempoProducao"] != Nil, body["tempoProducao"], "0"))
+        
+        lErro := .F.
+        cErro := ""
+        aValidacoes := {}
+        
+        // Validações obrigatórias
+        If Empty(cNumOP)
+            aAdd(aValidacoes, "Número da OP é obrigatório")
+        EndIf
+        If nQuantidade <= 0
+            aAdd(aValidacoes, "Quantidade deve ser maior que zero")
+        EndIf
+        If Empty(cRecurso)
+            aAdd(aValidacoes, "Recurso é obrigatório")
+        EndIf
+        If Empty(cOperador)
+            aAdd(aValidacoes, "Operador é obrigatório")
+        EndIf
+        If Empty(dDataIni) .Or. Empty(dDataFim)
+            aAdd(aValidacoes, "Datas de início e fim são obrigatórias")
+        EndIf
+        If dDataFim < dDataIni
+            aAdd(aValidacoes, "Data fim deve ser maior ou igual à data início")
+        EndIf
+        
+        If Len(aValidacoes) > 0
+            cMsgValidacao := ""
+            For nIndice := 1 To Len(aValidacoes)
+                cMsgValidacao += aValidacoes[nIndice] + "; "
+            Next
+            Return { "sucesso" => .F., "erro" => "Validações: " + cMsgValidacao }
+        EndIf
+        
+        oLog := { "acao" => "apontamentoProducao", "op" => cNumOP, "quantidade" => nQuantidade, "operador" => cOperador, "data" => DToS(Date()), "hora" => Time() }
+        
+        Begin Sequence
+            // Verifica se a OP existe e está liberada
+            cQuery := "SELECT C2_QUANT, C2_QUJE, C2_TPOP, C2_PRODUTO FROM SC2010 " +;
+                     "WHERE D_E_L_E_T_ = '' AND C2_NUM = '" + cNumOP + "'"
+            aDados := QuerySql(cQuery)
+            
+            If Empty(aDados)
+                lErro := .T.
+                cErro := "OP não encontrada: " + cNumOP
+            Else
+                nQtdPlanejada := aDados[1]["C2_QUANT"]
+                nQtdJaProduzida := aDados[1]["C2_QUJE"]
+                nQtdDisponivel := nQtdPlanejada - nQtdJaProduzida
+                
+                If aDados[1]["C2_TPOP"] == "S"
+                    lErro := .T.
+                    cErro := "OP já está encerrada"
+                ElseIf nQuantidade > nQtdDisponivel
+                    lErro := .T.
+                    cErro := "Quantidade a produzir (" + AllTrim(Str(nQuantidade)) + ") maior que disponível (" + AllTrim(Str(nQtdDisponivel)) + ")"
+                EndIf
+            EndIf
+            
+            If !lErro
+                // Verifica disponibilidade do recurso
+                If !This:verificaDisponibilidadeRecurso(cRecurso, dDataIni, cHoraIni, dDataFim, cHoraFim)
+                    lErro := .T.
+                    cErro := "Recurso " + cRecurso + " não disponível no período informado"
+                EndIf
+            EndIf
+            
+            If !lErro
+                // Atualiza quantidade produzida na OP
+                cQuery := "UPDATE SC2010 SET C2_QUJE = C2_QUJE + " + AllTrim(Str(nQuantidade)) + ", " +;
+                         "C2_PERDA = C2_PERDA + " + AllTrim(Str(nRefugo)) + " " +;
+                         "WHERE D_E_L_E_T_ = '' AND C2_NUM = '" + cNumOP + "'"
+                lOk := ExecSql(cQuery)
+                
+                If lOk
+                    // Registra o apontamento detalhado
+                    This:registraApontamentoDetalhado(cNumOP, cItem, cSequencia, nQuantidade, nRefugo, cRecurso, cOperador, dDataIni, cHoraIni, dDataFim, cHoraFim, cObservacoes, nTempoSetup, nTempoProducao)
+                    
+                    // Atualiza status do recurso
+                    This:atualizaStatusRecurso(cRecurso, "OCUPADO", cNumOP)
+                    
+                    // Verifica se OP foi finalizada
+                    If (nQtdJaProduzida + nQuantidade) >= nQtdPlanejada
+                        This:finalizarOP(cNumOP)
+                    EndIf
+                Else
+                    lErro := .T.
+                    cErro := "Falha ao atualizar quantidade produzida na OP"
+                EndIf
+            EndIf
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro no apontamento: " + oErr:Description
+        End Sequence
+        
+        This:registraLogPCP("apontamentoProducao", cOperador, oLog, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "mensagem" => "Apontamento realizado com sucesso", "novaQuantidadeProduzida" => nQtdJaProduzida + nQuantidade }
+
+    /*
+     * Controle de recursos de produção (máquinas, operadores, ferramentas)
+     * Permite reserva, ocupação e liberação de recursos
+     */
+    @Get("/pcp/recursos/status")
+    action statusRecursos(params)
+        Local cTipoRecurso, dDataConsulta, aRecursos, cQuery, aDados, nI, oRecurso
+        Local cStatus, cOPAtual, nPercentualUso, aHistorico, lErro, cErro
+        
+        cTipoRecurso := Iif(!Empty(params["tipo"]), params["tipo"], "")
+        dDataConsulta := Iif(!Empty(params["data"]), SToD(StrTran(params["data"], "-", "")), Date())
+        lErro := .F.
+        cErro := ""
+        aRecursos := {}
+        
+        Begin Sequence
+            // Busca recursos cadastrados
+            cQuery := "SELECT H1_CODIGO, H1_DESCRI, H1_TIPO, H1_CENTRO, H1_ATIVO " +;
+                     "FROM SH1010 WHERE D_E_L_E_T_ = ''"
+            
+            If !Empty(cTipoRecurso)
+                cQuery += " AND H1_TIPO = '" + cTipoRecurso + "'"
+            EndIf
+            
+            cQuery += " ORDER BY H1_CODIGO"
+            aDados := QuerySql(cQuery)
+            
+            For nI := 1 To Len(aDados)
+                // Verifica status atual do recurso
+                cStatus := This:verificaStatusRecurso(aDados[nI]["H1_CODIGO"], dDataConsulta)
+                cOPAtual := This:buscaOPAtualRecurso(aDados[nI]["H1_CODIGO"])
+                nPercentualUso := This:calculaPercentualUsoRecurso(aDados[nI]["H1_CODIGO"], dDataConsulta)
+                aHistorico := This:buscaHistoricoRecurso(aDados[nI]["H1_CODIGO"], dDataConsulta)
+                
+                oRecurso := {;
+                    "codigo" => aDados[nI]["H1_CODIGO"],;
+                    "descricao" => aDados[nI]["H1_DESCRI"],;
+                    "tipo" => aDados[nI]["H1_TIPO"],;
+                    "centro" => aDados[nI]["H1_CENTRO"],;
+                    "ativo" => aDados[nI]["H1_ATIVO"] == "1",;
+                    "status" => cStatus,;
+                    "opAtual" => cOPAtual,;
+                    "percentualUso" => nPercentualUso,;
+                    "historico" => aHistorico;
+                }
+                
+                aAdd(aRecursos, oRecurso)
+            Next
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro ao consultar recursos: " + oErr:Description
+        End Sequence
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return {;
+            "sucesso" => .T.,;
+            "recursos" => aRecursos,;
+            "totalRecursos" => Len(aRecursos),;
+            "dataConsulta" => DToS(dDataConsulta);
+        }
+
+    /*
+     * Empenho automático de materiais para OP
+     * Valida disponibilidade e gera empenhos no SD4
+     */
+    @Post("/pcp/op/:numero/empenhar")
+    action empenharMateriaisOP(params)
+        Local cNumOP, aMateriaisOP, nI, cMaterial, nQuantidade, nSaldoDisp, lOk
+        Local cQuery, aDados, aEmpenhos, aFalhas, oEmpenho, lErro, cErro, oLog
+        
+        cNumOP := AllTrim(params["numero"])
+        lErro := .F.
+        cErro := ""
+        aEmpenhos := {}
+        aFalhas := {}
+        
+        If Empty(cNumOP)
+            Return { "sucesso" => .F., "erro" => "Número da OP é obrigatório." }
+        EndIf
+        
+        oLog := { "acao" => "empenharMateriaisOP", "op" => cNumOP, "data" => DToS(Date()), "hora" => Time() }
+        
+        Begin Sequence
+            // Busca materiais da estrutura da OP
+            cQuery := "SELECT G1_COMP, G1_QUANT FROM SG1010 G1 " +;
+                     "INNER JOIN SC2010 C2 ON G1_COD = C2_PRODUTO AND C2.D_E_L_E_T_ = '' " +;
+                     "WHERE G1.D_E_L_E_T_ = '' AND C2_NUM = '" + cNumOP + "'"
+            aMateriaisOP := QuerySql(cQuery)
+            
+            For nI := 1 To Len(aMateriaisOP)
+                cMaterial := aMateriaisOP[nI]["G1_COMP"]
+                nQuantidade := aMateriaisOP[nI]["G1_QUANT"]
+                
+                // Verifica saldo disponível
+                cQuery := "SELECT SUM(B2_QATU) AS SALDO FROM SB2010 " +;
+                         "WHERE D_E_L_E_T_ = '' AND B2_COD = '" + cMaterial + "'"
+                aDados := QuerySql(cQuery)
+                nSaldoDisp := Iif(!Empty(aDados), aDados[1]["SALDO"], 0)
+                
+                If nSaldoDisp >= nQuantidade
+                    // Gera empenho
+                    lOk := This:gerarEmpenho(cNumOP, cMaterial, nQuantidade)
+                    If lOk
+                        oEmpenho := { "material" => cMaterial, "quantidade" => nQuantidade, "status" => "EMPENHADO" }
+                        aAdd(aEmpenhos, oEmpenho)
+                    Else
+                        oEmpenho := { "material" => cMaterial, "quantidade" => nQuantidade, "status" => "ERRO_EMPENHO" }
+                        aAdd(aFalhas, oEmpenho)
+                    EndIf
+                Else
+                    oEmpenho := { "material" => cMaterial, "quantidade" => nQuantidade, "saldoDisponivel" => nSaldoDisp, "status" => "SALDO_INSUFICIENTE" }
+                    aAdd(aFalhas, oEmpenho)
+                EndIf
+            Next
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro ao empenhar materiais: " + oErr:Description
+        End Sequence
+        
+        This:registraLogPCP("empenharMateriaisOP", "API", oLog, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return {;
+            "sucesso" => .T.,;
+            "op" => cNumOP,;
+            "empenhosRealizados" => aEmpenhos,;
+            "falhasEmpenho" => aFalhas,;
+            "totalEmpenhos" => Len(aEmpenhos),;
+            "totalFalhas" => Len(aFalhas);
+        }
+
+    // =====================================================================
+    // FUNÇÕES AUXILIARES DA PARTE 2
+    // =====================================================================
+    
+    /*
+     * Busca fornecedores preferenciais para um produto
+     */
+    buscaFornecedoresPreferenciais(cProduto)
+        Local cQuery, aDados, aFornecedores, nI, oFornecedor
+        
+        aFornecedores := {}
+        cQuery := "SELECT A5_FORNECE, A5_LOJA, A2_NOME, A5_CODPRF, A5_PRECO1 " +;
+                 "FROM SA5010 A5 " +;
+                 "INNER JOIN SA2010 A2 ON A5_FORNECE = A2_COD AND A5_LOJA = A2_LOJA AND A2.D_E_L_E_T_ = '' " +;
+                 "WHERE A5.D_E_L_E_T_ = '' AND A5_PRODUTO = '" + cProduto + "' " +;
+                 "ORDER BY A5_PRECO1"
+        
+        aDados := QuerySql(cQuery)
+        For nI := 1 To Len(aDados)
+            oFornecedor := {;
+                "codigo" => aDados[nI]["A5_FORNECE"],;
+                "loja" => aDados[nI]["A5_LOJA"],;
+                "nome" => aDados[nI]["A2_NOME"],;
+                "codigoProdutoFornecedor" => aDados[nI]["A5_CODPRF"],;
+                "preco" => aDados[nI]["A5_PRECO1"];
+            }
+            aAdd(aFornecedores, oFornecedor)
+        Next
+        
+        Return aFornecedores
+
+    /*
+     * Gera sugestão de compra para material em falta
+     */
+    geraSugestaoCompra(cMaterial, nQuantidadeFaltante, aFornecedores)
+        Local oSugestao, dDataSugerida, nLeadTime, cFornecedorSugerido, nPrecoSugerido
+        
+        dDataSugerida := Date() + 1
+        nLeadTime := 5  // Lead time padrão
+        cFornecedorSugerido := ""
+        nPrecoSugerido := 0
+        
+        If Len(aFornecedores) > 0
+            cFornecedorSugerido := aFornecedores[1]["codigo"] + "/" + aFornecedores[1]["loja"]
+            nPrecoSugerido := aFornecedores[1]["preco"]
+        EndIf
+        
+        oSugestao := {;
+            "material" => cMaterial,;
+            "quantidadeSugerida" => nQuantidadeFaltante,;
+            "fornecedorSugerido" => cFornecedorSugerido,;
+            "precoUnitario" => nPrecoSugerido,;
+            "valorTotal" => nQuantidadeFaltante * nPrecoSugerido,;
+            "dataSugerida" => DToS(dDataSugerida),;
+            "leadTime" => nLeadTime;
+        }
+        
+        Return oSugestao
+
+    /*
+     * Verifica disponibilidade do recurso em um período
+     */
+    verificaDisponibilidadeRecurso(cRecurso, dDataIni, cHoraIni, dDataFim, cHoraFim)
+        Local cQuery, aDados, lDisponivel
+        
+        // Verifica se o recurso está livre no período
+        cQuery := "SELECT COUNT(*) AS OCUPADO FROM APONTAMENTOS_RECURSOS " +;
+                 "WHERE RECURSO = '" + cRecurso + "' " +;
+                 "AND ((DATA_INI <= '" + DToS(dDataIni) + "' AND DATA_FIM >= '" + DToS(dDataIni) + "') " +;
+                 "OR (DATA_INI <= '" + DToS(dDataFim) + "' AND DATA_FIM >= '" + DToS(dDataFim) + "'))"
+        
+        aDados := QuerySql(cQuery)
+        lDisponivel := Iif(!Empty(aDados), aDados[1]["OCUPADO"] == 0, .T.)
+        
+        Return lDisponivel
+
+    /*
+     * Registra apontamento detalhado em arquivo JSON
+     */
+    registraApontamentoDetalhado(cNumOP, cItem, cSequencia, nQuantidade, nRefugo, cRecurso, cOperador, dDataIni, cHoraIni, dDataFim, cHoraFim, cObservacoes, nTempoSetup, nTempoProducao)
+        Local file, fs, all, oApontamento
+        
+        file := "./apontamentos_producao.json"
+        all := {}
+        
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+        EndIf
+        
+        oApontamento := {;
+            "numeroOP" => cNumOP,;
+            "item" => cItem,;
+            "sequencia" => cSequencia,;
+            "quantidade" => nQuantidade,;
+            "refugo" => nRefugo,;
+            "recurso" => cRecurso,;
+            "operador" => cOperador,;
+            "dataInicio" => DToS(dDataIni),;
+            "horaInicio" => cHoraIni,;
+            "dataFim" => DToS(dDataFim),;
+            "horaFim" => cHoraFim,;
+            "observacoes" => cObservacoes,;
+            "tempoSetup" => nTempoSetup,;
+            "tempoProducao" => nTempoProducao,;
+            "timestamp" => FWTimeStamp(3);
+        }
+        
+        aAdd(all, oApontamento)
+        MemoWrite(file, JsonEncode(all))
+        
+        Return .T.
+
+    /*
+     * Atualiza status do recurso
+     */
+    atualizaStatusRecurso(cRecurso, cStatus, cOP)
+        Local file, fs, all, oStatus, nI, lAchou
+        
+        file := "./status_recursos.json"
+        all := {}
+        lAchou := .F.
+        
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+        EndIf
+        
+        // Procura se já existe status para o recurso
+        For nI := 1 To Len(all)
+            If all[nI]["recurso"] == cRecurso
+                all[nI]["status"] := cStatus
+                all[nI]["op"] := cOP
+                all[nI]["dataAtualizacao"] := DToS(Date())
+                all[nI]["horaAtualizacao"] := Time()
+                lAchou := .T.
+                Exit
+            EndIf
+        Next
+        
+        // Se não encontrou, adiciona novo
+        If !lAchou
+            oStatus := {;
+                "recurso" => cRecurso,;
+                "status" => cStatus,;
+                "op" => cOP,;
+                "dataAtualizacao" => DToS(Date()),;
+                "horaAtualizacao" => Time();
+            }
+            aAdd(all, oStatus)
+        EndIf
+        
+        MemoWrite(file, JsonEncode(all))
+        Return .T.
+
+    /*
+     * Finaliza OP automaticamente
+     */
+    finalizarOP(cNumOP)
+        Local cQuery, lOk
+        
+        cQuery := "UPDATE SC2010 SET C2_TPOP = 'S', C2_DATRF = '" + DToS(Date()) + "' " +;
+                 "WHERE D_E_L_E_T_ = '' AND C2_NUM = '" + cNumOP + "'"
+        
+        lOk := ExecSql(cQuery)
+        
+        If lOk
+            // Libera recursos da OP
+            This:liberarRecursosOP(cNumOP)
+            
+            // Registra log de finalização
+            This:registraLogPCP("finalizarOP", "SISTEMA", { "op" => cNumOP }, .T.)
+        EndIf
+        
+        Return lOk
+
+    /*
+     * Verifica status atual do recurso
+     */
+    verificaStatusRecurso(cRecurso, dData)
+        Local file, fs, all, nI, cStatus
+        
+        file := "./status_recursos.json"
+        cStatus := "LIVRE"
+        
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+            
+            For nI := 1 To Len(all)
+                If all[nI]["recurso"] == cRecurso
+                    cStatus := all[nI]["status"]
+                    Exit
+                EndIf
+            Next
+        EndIf
+        
+        Return cStatus
+
+    /*
+     * Busca OP atual do recurso
+     */
+    buscaOPAtualRecurso(cRecurso)
+        Local file, fs, all, nI, cOP
+        
+        file := "./status_recursos.json"
+        cOP := ""
+        
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+            
+            For nI := 1 To Len(all)
+                If all[nI]["recurso"] == cRecurso
+                    cOP := all[nI]["op"]
+                    Exit
+                EndIf
+            Next
+        EndIf
+        
+        Return cOP
+
+    /*
+     * Calcula percentual de uso do recurso
+     */
+    calculaPercentualUsoRecurso(cRecurso, dData)
+        Local file, fs, all, nI, nTotalHoras, nHorasUsadas, nPercentual
+        
+        file := "./apontamentos_producao.json"
+        nTotalHoras := 8  // 8 horas padrão por dia
+        nHorasUsadas := 0
+        
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+            
+            For nI := 1 To Len(all)
+                If all[nI]["recurso"] == cRecurso .And. all[nI]["dataInicio"] == DToS(dData)
+                    nHorasUsadas += all[nI]["tempoProducao"] / 60  // Converte minutos para horas
+                EndIf
+            Next
+        EndIf
+        
+        nPercentual := Iif(nTotalHoras > 0, Round((nHorasUsadas / nTotalHoras) * 100, 2), 0)
+        
+        Return nPercentual
+
+    /*
+     * Busca histórico do recurso
+     */
+    buscaHistoricoRecurso(cRecurso, dData)
+        Local file, fs, all, nI, aHistorico, oItem
+        
+        file := "./apontamentos_producao.json"
+        aHistorico := {}
+        
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+            
+            For nI := 1 To Len(all)
+                If all[nI]["recurso"] == cRecurso .And. all[nI]["dataInicio"] == DToS(dData)
+                    oItem := {;
+                        "op" => all[nI]["numeroOP"],;
+                        "quantidade" => all[nI]["quantidade"],;
+                        "operador" => all[nI]["operador"],;
+                        "horaInicio" => all[nI]["horaInicio"],;
+                        "horaFim" => all[nI]["horaFim"];
+                    }
+                    aAdd(aHistorico, oItem)
+                EndIf
+            Next
+        EndIf
+        
+        Return aHistorico
+
+    /*
+     * Gera empenho de material
+     */
+    gerarEmpenho(cOP, cMaterial, nQuantidade)
+        Local cQuery, lOk
+        
+        // Simulação de geração de empenho - em ambiente real usaria ExecAuto
+        cQuery := "INSERT INTO SD4010 (D4_FILIAL, D4_OP, D4_COD, D4_QUANT, D4_DATA) " +;
+                 "VALUES ('01', '" + cOP + "', '" + cMaterial + "', " + AllTrim(Str(nQuantidade)) + ", '" + DToS(Date()) + "')"
+        
+        lOk := ExecSql(cQuery)
+        
+        Return lOk
+
+    /*
+     * Libera recursos da OP
+     */
+    liberarRecursosOP(cOP)
+        Local file, fs, all, nI
+        
+        file := "./status_recursos.json"
+        
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+            
+            For nI := 1 To Len(all)
+                If all[nI]["op"] == cOP
+                    all[nI]["status"] := "LIVRE"
+                    all[nI]["op"] := ""
+                    all[nI]["dataAtualizacao"] := DToS(Date())
+                    all[nI]["horaAtualizacao"] := Time()
+                EndIf
+            Next
+            
+            MemoWrite(file, JsonEncode(all))
+        EndIf
         
         Return .T.
 }
