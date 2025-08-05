@@ -1532,4 +1532,1061 @@ Class QualidadeAvancada
         
         Return aArvore
 
+    // =====================================================================
+    // PARTE 4: AUDITORIAS AUTOMÁTICAS E RELATÓRIOS AVANÇADOS
+    // =====================================================================
+
+    /*
+     * Sistema de auditorias automáticas baseado em checklist configurável
+     * Executa auditorias periódicas e gera relatórios de conformidade
+     */
+    @Post("/qualidade/executar-auditoria")
+    action executarAuditoria(body)
+        Local cTipoAuditoria, aDepartamentos, cResponsavel, aChecklists, oAuditoria
+        Local nI, oItem, nPontuacao, nConformidade, aResultados, aAcoesCorretivas, lErro, cErro
+        
+        cTipoAuditoria := AllTrim(body["tipoAuditoria"]) // ISO9001, ISO14001, INTERNA, etc.
+        aDepartamentos := Iif(body["departamentos"] != Nil, body["departamentos"], {})
+        cResponsavel := AllTrim(body["responsavel"])
+        aChecklists := Iif(body["checklists"] != Nil, body["checklists"], {})
+        
+        lErro := .F.
+        cErro := ""
+        aResultados := {}
+        aAcoesCorretivas := {}
+        
+        If Empty(cTipoAuditoria) .Or. Empty(cResponsavel)
+            Return { "sucesso" => .F., "erro" => "Tipo de auditoria e responsável são obrigatórios" }
+        EndIf
+        
+        Begin Sequence
+            // Se não especificou checklist, busca padrão do tipo
+            If Empty(aChecklists)
+                aChecklists := This:buscarChecklistPadrao(cTipoAuditoria)
+            EndIf
+            
+            // Se não especificou departamentos, audita todos
+            If Empty(aDepartamentos)
+                aDepartamentos := This:buscarDepartamentosAtivos()
+            EndIf
+            
+            nPontuacao := 0
+            
+            // Executa cada item do checklist
+            For nI := 1 To Len(aChecklists)
+                oItem := aChecklists[nI]
+                
+                // Executa verificação automática se aplicável
+                If oItem["automatico"] == .T.
+                    oItem["resultado"] := This:executarVerificacaoAutomatica(oItem["codigo"], aDepartamentos)
+                    oItem["evidencia"] := oItem["resultado"]["evidencia"]
+                    oItem["observacoes"] := oItem["resultado"]["observacoes"]
+                Else
+                    // Para itens manuais, mantém o resultado informado
+                    If oItem["resultado"] == Nil
+                        oItem["resultado"] := { "conforme" => .F., "evidencia" => "", "observacoes" => "Verificação manual pendente" }
+                    EndIf
+                EndIf
+                
+                // Calcula pontuação
+                If oItem["resultado"]["conforme"] == .T.
+                    nPontuacao += oItem["peso"]
+                Else
+                    // Gera ação corretiva se não conforme
+                    aAdd(aAcoesCorretivas, This:gerarAcaoCorretiva(oItem, aDepartamentos))
+                EndIf
+                
+                aAdd(aResultados, oItem)
+            Next
+            
+            // Calcula percentual de conformidade
+            nConformidade := Round((nPontuacao / This:calcularPontuacaoMaxima(aChecklists)) * 100, 2)
+            
+            oAuditoria := {;
+                "codigo" => This:gerarCodigoAuditoria(cTipoAuditoria),;
+                "tipoAuditoria" => cTipoAuditoria,;
+                "departamentos" => aDepartamentos,;
+                "responsavel" => cResponsavel,;
+                "dataExecucao" => DToS(Date()),;
+                "horaExecucao" => Time(),;
+                "resultados" => aResultados,;
+                "pontuacaoTotal" => nPontuacao,;
+                "percentualConformidade" => nConformidade,;
+                "acoesCorretivas" => aAcoesCorretivas,;
+                "status" => Iif(nConformidade >= 95, "EXCELENTE", Iif(nConformidade >= 85, "CONFORME", "NAO_CONFORME"));
+            }
+            
+            // Registra auditoria no sistema
+            This:registrarAuditoria(oAuditoria)
+            
+            // Programa próxima auditoria automaticamente
+            This:programarProximaAuditoria(cTipoAuditoria, oAuditoria["status"])
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro na execução da auditoria: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("executarAuditoria", cResponsavel, {"tipo" => cTipoAuditoria, "conformidade" => nConformidade}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "auditoria" => oAuditoria }
+
+    /*
+     * Gerador de relatórios gerenciais avançados de qualidade
+     * Relatórios executivos com análises estatísticas e gráficos
+     */
+    @Post("/qualidade/relatorio-gerencial")
+    action relatorioGerencial(body)
+        Local cTipoRelatorio, dDataIni, dDataFim, aFiltros, oRelatorio, aDados
+        Local aAnalisesEstatisticas, aGraficos, aRecomendacoes, cFormato, lErro, cErro
+        
+        cTipoRelatorio := AllTrim(body["tipoRelatorio"]) // PRODUTIVIDADE, FORNECEDORES, CUSTOS, etc.
+        dDataIni := SToD(StrTran(body["dataInicio"], "-", ""))
+        dDataFim := SToD(StrTran(body["dataFim"], "-", ""))
+        aFiltros := Iif(body["filtros"] != Nil, body["filtros"], {})
+        cFormato := Iif(body["formato"] != Nil, AllTrim(body["formato"]), "JSON") // JSON, PDF, EXCEL
+        
+        lErro := .F.
+        cErro := ""
+        
+        If Empty(cTipoRelatorio) .Or. Empty(dDataIni) .Or. Empty(dDataFim)
+            Return { "sucesso" => .F., "erro" => "Tipo de relatório e período são obrigatórios" }
+        EndIf
+        
+        If dDataFim < dDataIni
+            Return { "sucesso" => .F., "erro" => "Data fim deve ser maior que data início" }
+        EndIf
+        
+        Begin Sequence
+            // Coleta dados baseado no tipo de relatório
+            aDados := This:coletarDadosRelatorio(cTipoRelatorio, dDataIni, dDataFim, aFiltros)
+            
+            If Empty(aDados)
+                Return { "sucesso" => .F., "erro" => "Nenhum dado encontrado para os filtros especificados" }
+            EndIf
+            
+            // Gera análises estatísticas
+            aAnalisesEstatisticas := This:gerarAnalisesEstatisticas(aDados, cTipoRelatorio)
+            
+            // Gera dados para gráficos
+            aGraficos := This:gerarDadosGraficos(aDados, cTipoRelatorio)
+            
+            // Gera recomendações baseadas nos dados
+            aRecomendacoes := This:gerarRecomendacoesRelatorio(aAnalisesEstatisticas, cTipoRelatorio)
+            
+            oRelatorio := {;
+                "codigo" => This:gerarCodigoRelatorio(cTipoRelatorio),;
+                "tipoRelatorio" => cTipoRelatorio,;
+                "periodo" => {;
+                    "dataInicio" => DToS(dDataIni),;
+                    "dataFim" => DToS(dDataFim);
+                },;
+                "filtros" => aFiltros,;
+                "formato" => cFormato,;
+                "dataGeracao" => DToS(Date()),;
+                "horaGeracao" => Time(),;
+                "dados" => aDados,;
+                "analisesEstatisticas" => aAnalisesEstatisticas,;
+                "graficos" => aGraficos,;
+                "recomendacoes" => aRecomendacoes,;
+                "resumoExecutivo" => This:gerarResumoExecutivo(aAnalisesEstatisticas, aRecomendacoes);
+            }
+            
+            // Gera arquivo se formato diferente de JSON
+            If cFormato != "JSON"
+                oRelatorio["nomeArquivo"] := This:exportarRelatorio(oRelatorio, cFormato)
+            EndIf
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro na geração do relatório: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("relatorioGerencial", "SISTEMA", {"tipo" => cTipoRelatorio, "periodo" => DToS(dDataIni) + "-" + DToS(dDataFim)}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "relatorio" => oRelatorio }
+
+    /*
+     * Sistema de acompanhamento de ações corretivas e preventivas
+     * Gerencia CAPA (Corrective and Preventive Actions) completo
+     */
+    @Post("/qualidade/acao-corretiva")
+    action gerenciarAcaoCorretiva(body)
+        Local cTipoAcao, cOrigem, cDescricaoProblema, cCausaRaiz, aAcoesImediatas
+        Local aAcoesCorretivas, cResponsavel, dPrazo, oAcao, cCodigo, lErro, cErro
+        
+        cTipoAcao := AllTrim(body["tipoAcao"]) // CORRETIVA, PREVENTIVA
+        cOrigem := AllTrim(body["origem"]) // AUDITORIA, NAO_CONFORMIDADE, RECLAMACAO
+        cDescricaoProblema := body["descricaoProblema"]
+        cCausaRaiz := body["causaRaiz"]
+        aAcoesImediatas := Iif(body["acoesImediatas"] != Nil, body["acoesImediatas"], {})
+        aAcoesCorretivas := Iif(body["acoesCorretivas"] != Nil, body["acoesCorretivas"], {})
+        cResponsavel := AllTrim(body["responsavel"])
+        dPrazo := SToD(StrTran(body["prazo"], "-", ""))
+        
+        lErro := .F.
+        cErro := ""
+        
+        If Empty(cTipoAcao) .Or. Empty(cOrigem) .Or. Empty(cDescricaoProblema) .Or. Empty(cResponsavel)
+            Return { "sucesso" => .F., "erro" => "Tipo, origem, descrição e responsável são obrigatórios" }
+        EndIf
+        
+        Begin Sequence
+            cCodigo := This:gerarCodigoAcaoCorretiva(cTipoAcao)
+            
+            oAcao := {;
+                "codigo" => cCodigo,;
+                "tipoAcao" => cTipoAcao,;
+                "origem" => cOrigem,;
+                "descricaoProblema" => cDescricaoProblema,;
+                "causaRaiz" => cCausaRaiz,;
+                "acoesImediatas" => aAcoesImediatas,;
+                "acoesCorretivas" => aAcoesCorretivas,;
+                "responsavel" => cResponsavel,;
+                "prazo" => DToS(dPrazo),;
+                "dataAbertura" => DToS(Date()),;
+                "horaAbertura" => Time(),;
+                "status" => "ABERTA",;
+                "eficacia" => "",;
+                "dataFechamento" => "",;
+                "historicoAlteracoes" => {};
+            }
+            
+            // Registra ação no sistema
+            This:registrarAcaoCorretiva(oAcao)
+            
+            // Envia notificação para responsável
+            This:enviarNotificacaoAcaoCorretiva(oAcao)
+            
+            // Programa acompanhamento automático
+            This:programarAcompanhamentoAcao(cCodigo, dPrazo)
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro no gerenciamento da ação corretiva: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("gerenciarAcaoCorretiva", cResponsavel, {"codigo" => cCodigo, "tipo" => cTipoAcao}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "acaoCorretiva" => oAcao, "codigo" => cCodigo }
+
+    /*
+     * Painel de indicadores de qualidade em tempo real
+     * KPIs dinâmicos e alertas automáticos
+     */
+    @Get("/qualidade/indicadores-tempo-real")
+    action indicadoresTempoReal(params)
+        Local aPainelKPIs, aAlertas, aTendencias, aComparativos, oPainel, lErro, cErro
+        
+        lErro := .F.
+        cErro := ""
+        
+        Begin Sequence
+            // KPIs principais em tempo real
+            aPainelKPIs := This:calcularKPIsTempoReal()
+            
+            // Alertas críticos ativos
+            aAlertas := This:obterAlertasCriticosAtivos()
+            
+            // Tendências dos últimos 7 dias
+            aTendencias := This:calcularTendenciasRecentes(7)
+            
+            // Comparativo com período anterior
+            aComparativos := This:calcularComparativoPeriodos()
+            
+            oPainel := {;
+                "dataAtualizacao" => DToS(Date()) + " " + Time(),;
+                "kpis" => aPainelKPIs,;
+                "alertasCriticos" => aAlertas,;
+                "tendenciasRecentes" => aTendencias,;
+                "comparativoPeriodos" => aComparativos,;
+                "statusGeral" => This:calcularStatusGeral(aPainelKPIs, aAlertas);
+            }
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro ao obter indicadores: " + oErr:Description
+        End Sequence
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "painel" => oPainel }
+
+    /*
+     * Gerador de análise de capacidade de processo (Cp, Cpk)
+     * Análise estatística avançada para controle de processos
+     */
+    @Post("/qualidade/analise-capacidade")
+    action analiseCapacidadeProcesso(body)
+        Local cProduto, cEnsaio, dDataIni, dDataFim, nLSE, nLIE, aDadosEnsaios
+        Local oAnalise, nCp, nCpk, nPpk, nMedia, nDesvio, aHistograma, lErro, cErro
+        
+        cProduto := AllTrim(body["produto"])
+        cEnsaio := AllTrim(body["ensaio"])
+        dDataIni := SToD(StrTran(body["dataInicio"], "-", ""))
+        dDataFim := SToD(StrTran(body["dataFim"], "-", ""))
+        nLSE := body["limiteSuperior"] // Limite Superior de Especificação
+        nLIE := body["limiteInferior"] // Limite Inferior de Especificação
+        
+        lErro := .F.
+        cErro := ""
+        
+        If Empty(cProduto) .Or. Empty(cEnsaio) .Or. Empty(nLSE) .Or. Empty(nLIE)
+            Return { "sucesso" => .F., "erro" => "Produto, ensaio e limites são obrigatórios" }
+        EndIf
+        
+        If nLSE <= nLIE
+            Return { "sucesso" => .F., "erro" => "Limite superior deve ser maior que limite inferior" }
+        EndIf
+        
+        Begin Sequence
+            // Coleta dados dos ensaios
+            aDadosEnsaios := This:coletarDadosEnsaiosCapacidade(cProduto, cEnsaio, dDataIni, dDataFim)
+            
+            If Len(aDadosEnsaios) < 30
+                Return { "sucesso" => .F., "erro" => "Mínimo de 30 medições necessárias para análise de capacidade" }
+            EndIf
+            
+            // Calcula estatísticas básicas
+            nMedia := This:calcularMedia(aDadosEnsaios)
+            nDesvio := This:calcularDesvioPadrao(aDadosEnsaios)
+            
+            // Calcula índices de capacidade
+            nCp := (nLSE - nLIE) / (6 * nDesvio)
+            nCpk := Min((nLSE - nMedia) / (3 * nDesvio), (nMedia - nLIE) / (3 * nDesvio))
+            nPpk := This:calcularPpk(aDadosEnsaios, nLSE, nLIE)
+            
+            // Gera histograma
+            aHistograma := This:gerarHistograma(aDadosEnsaios, 10) // 10 classes
+            
+            oAnalise := {;
+                "produto" => cProduto,;
+                "ensaio" => cEnsaio,;
+                "periodo" => DToS(dDataIni) + " a " + DToS(dDataFim),;
+                "totalMedicoes" => Len(aDadosEnsaios),;
+                "limiteSuperior" => nLSE,;
+                "limiteInferior" => nLIE,;
+                "media" => nMedia,;
+                "desvioPadrao" => nDesvio,;
+                "cp" => Round(nCp, 4),;
+                "cpk" => Round(nCpk, 4),;
+                "ppk" => Round(nPpk, 4),;
+                "histograma" => aHistograma,;
+                "interpretacao" => This:interpretarIndicesCapacidade(nCp, nCpk),;
+                "recomendacoes" => This:gerarRecomendacoesCapacidade(nCp, nCpk, nPpk);
+            }
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro na análise de capacidade: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("analiseCapacidadeProcesso", "SISTEMA", {"produto" => cProduto, "ensaio" => cEnsaio}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "analiseCapacidade" => oAnalise }
+
+    // =====================================================================
+    // MÉTODOS AUXILIARES - PARTE 4
+    // =====================================================================
+    
+    /*
+     * Busca checklist padrão para tipo de auditoria
+     */
+    Method buscarChecklistPadrao(cTipoAuditoria)
+        Local aChecklist
+        
+        If cTipoAuditoria == "ISO9001"
+            aChecklist := {;
+                { "codigo" => "ISO9001_01", "descricao" => "Política da Qualidade documentada e comunicada", "peso" => 10, "automatico" => .T. },;
+                { "codigo" => "ISO9001_02", "descricao" => "Objetivos da Qualidade mensuráveis", "peso" => 10, "automatico" => .T. },;
+                { "codigo" => "ISO9001_03", "descricao" => "Controle de documentos implementado", "peso" => 15, "automatico" => .T. },;
+                { "codigo" => "ISO9001_04", "descricao" => "Registros da qualidade controlados", "peso" => 15, "automatico" => .T. },;
+                { "codigo" => "ISO9001_05", "descricao" => "Análise crítica pela direção realizada", "peso" => 20, "automatico" => .F. },;
+                { "codigo" => "ISO9001_06", "descricao" => "Ações corretivas implementadas", "peso" => 15, "automatico" => .T. },;
+                { "codigo" => "ISO9001_07", "descricao" => "Auditorias internas realizadas conforme programa", "peso" => 15, "automatico" => .T. };
+            }
+        ElseIf cTipoAuditoria == "INTERNA"
+            aChecklist := {;
+                { "codigo" => "INT_01", "descricao" => "Calibração de instrumentos em dia", "peso" => 25, "automatico" => .T. },;
+                { "codigo" => "INT_02", "descricao" => "Ensaios realizados conforme procedimentos", "peso" => 25, "automatico" => .T. },;
+                { "codigo" => "INT_03", "descricao" => "Não conformidades tratadas adequadamente", "peso" => 25, "automatico" => .T. },;
+                { "codigo" => "INT_04", "descricao" => "Treinamentos realizados conforme plano", "peso" => 25, "automatico" => .F. };
+            }
+        Else
+            aChecklist := {}
+        EndIf
+        
+        Return aChecklist
+
+    /*
+     * Executa verificação automática de item de auditoria
+     */
+    Method executarVerificacaoAutomatica(cCodigo, aDepartamentos)
+        Local oResultado, cQuery, aDados, lConforme, cEvidencia, cObservacoes
+        
+        lConforme := .F.
+        cEvidencia := ""
+        cObservacoes := ""
+        
+        If cCodigo == "ISO9001_01" // Política da Qualidade
+            // Verifica se existe documento de política
+            cQuery := "SELECT COUNT(*) AS QTD FROM QDH010 WHERE D_E_L_E_T_ = '' AND QDH_TITULO LIKE '%POLITICA%QUALIDADE%'"
+            aDados := This:executarQuery(cQuery)
+            lConforme := !Empty(aDados) .And. aDados[1]["QTD"] > 0
+            cEvidencia := Iif(lConforme, "Documento de Política encontrado", "Documento não encontrado")
+            
+        ElseIf cCodigo == "INT_01" // Calibração de instrumentos
+            // Verifica instrumentos vencidos
+            cQuery := "SELECT COUNT(*) AS VENCIDOS FROM QM1010 WHERE D_E_L_E_T_ = '' AND QM1_PROXCA < '" + DToS(Date()) + "'"
+            aDados := This:executarQuery(cQuery)
+            lConforme := !Empty(aDados) .And. aDados[1]["VENCIDOS"] == 0
+            cEvidencia := Iif(lConforme, "Todos os instrumentos calibrados", cValToChar(aDados[1]["VENCIDOS"]) + " instrumentos vencidos")
+            
+        ElseIf cCodigo == "INT_02" // Ensaios conforme procedimentos
+            // Verifica se todos os ensaios têm resultados
+            cQuery := "SELECT COUNT(*) AS PENDENTES FROM QAD010 WHERE D_E_L_E_T_ = '' AND QAD_RESULT = '' AND QAD_DTENTR >= '" + DToS(Date()-30) + "'"
+            aDados := This:executarQuery(cQuery)
+            lConforme := !Empty(aDados) .And. aDados[1]["PENDENTES"] == 0
+            cEvidencia := Iif(lConforme, "Todos os ensaios com resultados", cValToChar(aDados[1]["PENDENTES"]) + " ensaios pendentes")
+            
+        Else
+            lConforme := .F.
+            cEvidencia := "Verificação automática não implementada para este item"
+        EndIf
+        
+        oResultado := {;
+            "conforme" => lConforme,;
+            "evidencia" => cEvidencia,;
+            "observacoes" => cObservacoes;
+        }
+        
+        Return oResultado
+
+    /*
+     * Coleta dados para relatórios baseado no tipo
+     */
+    Method coletarDadosRelatorio(cTipoRelatorio, dDataIni, dDataFim, aFiltros)
+        Local cQuery, aDados
+        
+        If cTipoRelatorio == "PRODUTIVIDADE"
+            cQuery := "SELECT QAD_PRODUT, COUNT(*) AS TOTAL_ENSAIOS, " +;
+                     "SUM(CASE WHEN QAD_RLAUDO IN ('1','3') THEN 1 ELSE 0 END) AS APROVADOS, " +;
+                     "ROUND(AVG(DATEDIFF(day, QAD_DTCOLE, QAD_DTENTR)), 2) AS TEMPO_MEDIO " +;
+                     "FROM QAD010 WHERE D_E_L_E_T_ = '' " +;
+                     "AND QAD_DTENTR BETWEEN '" + DToS(dDataIni) + "' AND '" + DToS(dDataFim) + "' " +;
+                     "GROUP BY QAD_PRODUT ORDER BY TOTAL_ENSAIOS DESC"
+                     
+        ElseIf cTipoRelatorio == "FORNECEDORES"
+            cQuery := "SELECT QAD_FORNEC, A2_NOME, COUNT(*) AS TOTAL_ENSAIOS, " +;
+                     "SUM(CASE WHEN QAD_RLAUDO = '2' THEN 1 ELSE 0 END) AS NAO_CONFORMES, " +;
+                     "ROUND((SUM(CASE WHEN QAD_RLAUDO = '2' THEN 1 ELSE 0 END) * 100.0 / COUNT(*)), 2) AS TAXA_NC " +;
+                     "FROM QAD010 QAD " +;
+                     "INNER JOIN SA2010 SA2 ON QAD_FORNEC = A2_COD AND SA2.D_E_L_E_T_ = '' " +;
+                     "WHERE QAD.D_E_L_E_T_ = '' " +;
+                     "AND QAD_DTENTR BETWEEN '" + DToS(dDataIni) + "' AND '" + DToS(dDataFim) + "' " +;
+                     "GROUP BY QAD_FORNEC, A2_NOME ORDER BY TAXA_NC DESC"
+                     
+        Else
+            cQuery := ""
+        EndIf
+        
+        aDados := This:executarQuery(cQuery)
+        
+        Return aDados
+
+    /*
+     * Calcula média de array de valores
+     */
+    Method calcularMedia(aValores)
+        Local nSoma, nI, nMedia
+        
+        nSoma := 0
+        For nI := 1 To Len(aValores)
+            nSoma += aValores[nI]
+        Next
+        
+        nMedia := Iif(Len(aValores) > 0, nSoma / Len(aValores), 0)
+        
+        Return nMedia
+
+    /*
+     * Calcula desvio padrão de array de valores
+     */
+    Method calcularDesvioPadrao(aValores)
+        Local nMedia, nSomaQuadrados, nI, nVariancia, nDesvio
+        
+        nMedia := This:calcularMedia(aValores)
+        nSomaQuadrados := 0
+        
+        For nI := 1 To Len(aValores)
+            nSomaQuadrados += (aValores[nI] - nMedia) ^ 2
+        Next
+        
+        nVariancia := Iif(Len(aValores) > 1, nSomaQuadrados / (Len(aValores) - 1), 0)
+        nDesvio := Sqrt(nVariancia)
+        
+        Return nDesvio
+
+    /*
+     * Interpreta índices de capacidade do processo
+     */
+    Method interpretarIndicesCapacidade(nCp, nCpk)
+        Local cInterpretacao
+        
+        If nCpk >= 1.67
+            cInterpretacao := "Processo muito capaz - Classe Mundial"
+        ElseIf nCpk >= 1.33
+            cInterpretacao := "Processo adequado - Satisfatório"
+        ElseIf nCpk >= 1.0
+            cInterpretacao := "Processo mínimo - Necessita melhorias"
+        ElseIf nCpk >= 0.67
+            cInterpretacao := "Processo inadequado - Ação corretiva urgente"
+        Else
+            cInterpretacao := "Processo crítico - Revisão completa necessária"
+        EndIf
+        
+        Return cInterpretacao
+
+    // =====================================================================
+    // PARTE 5: INTEGRAÇÕES E UTILITÁRIOS DE QUALIDADE
+    // =====================================================================
+
+    /*
+     * Sincronização com sistemas externos de qualidade
+     * Integração bidirecional com LIMS e outros sistemas
+     */
+    @Post("/qualidade/sincronizar-sistema-externo")
+    action sincronizarSistemaExterno(body)
+        Local cSistemaExterno, cTipoOperacao, aDadosEnvio, oRetorno, aResultados
+        Local cURLEndpoint, cMetodoHTTP, oHeaders, lErro, cErro, nI
+        
+        cSistemaExterno := AllTrim(body["sistemaExterno"]) // LIMS, ERP_MATRIZ, SISTEMA_TERCEIRO
+        cTipoOperacao := AllTrim(body["tipoOperacao"]) // ENVIAR, RECEBER, SINCRONIZAR
+        aDadosEnvio := Iif(body["dados"] != Nil, body["dados"], {})
+        cURLEndpoint := AllTrim(body["urlEndpoint"])
+        cMetodoHTTP := Iif(body["metodoHTTP"] != Nil, AllTrim(body["metodoHTTP"]), "POST")
+        oHeaders := Iif(body["headers"] != Nil, body["headers"], {})
+        
+        lErro := .F.
+        cErro := ""
+        aResultados := {}
+        
+        If Empty(cSistemaExterno) .Or. Empty(cTipoOperacao)
+            Return { "sucesso" => .F., "erro" => "Sistema externo e tipo de operação são obrigatórios" }
+        EndIf
+        
+        Begin Sequence
+            If cTipoOperacao == "ENVIAR"
+                // Prepara dados para envio
+                aDadosEnvio := This:prepararDadosEnvio(cSistemaExterno, aDadosEnvio)
+                
+                // Envia dados
+                oRetorno := This:enviarDadosSistemaExterno(cURLEndpoint, cMetodoHTTP, aDadosEnvio, oHeaders)
+                
+                If oRetorno["sucesso"] == .T.
+                    aAdd(aResultados, "Envio realizado com sucesso - " + cValToChar(Len(aDadosEnvio)) + " registros")
+                Else
+                    lErro := .T.
+                    cErro := "Erro no envio: " + oRetorno["erro"]
+                EndIf
+                
+            ElseIf cTipoOperacao == "RECEBER"
+                // Recebe dados do sistema externo
+                oRetorno := This:receberDadosSistemaExterno(cURLEndpoint, cMetodoHTTP, oHeaders)
+                
+                If oRetorno["sucesso"] == .T.
+                    // Processa dados recebidos
+                    aResultados := This:processarDadosRecebidos(cSistemaExterno, oRetorno["dados"])
+                Else
+                    lErro := .T.
+                    cErro := "Erro no recebimento: " + oRetorno["erro"]
+                EndIf
+                
+            ElseIf cTipoOperacao == "SINCRONIZAR"
+                // Sincronização bidirecional
+                // 1. Envia dados locais
+                aDadosEnvio := This:obterDadosParaSincronizacao(cSistemaExterno)
+                oRetorno := This:enviarDadosSistemaExterno(cURLEndpoint, cMetodoHTTP, aDadosEnvio, oHeaders)
+                
+                If oRetorno["sucesso"] == .T.
+                    aAdd(aResultados, "Envio: " + cValToChar(Len(aDadosEnvio)) + " registros")
+                    
+                    // 2. Recebe dados externos
+                    oRetorno := This:receberDadosSistemaExterno(cURLEndpoint, "GET", oHeaders)
+                    
+                    If oRetorno["sucesso"] == .T.
+                        aResultados := AConcat(aResultados, This:processarDadosRecebidos(cSistemaExterno, oRetorno["dados"]))
+                    Else
+                        aAdd(aResultados, "Erro no recebimento: " + oRetorno["erro"])
+                    EndIf
+                Else
+                    lErro := .T.
+                    cErro := "Erro na sincronização: " + oRetorno["erro"]
+                EndIf
+            EndIf
+            
+            // Registra log da operação
+            This:registrarLogIntegracao(cSistemaExterno, cTipoOperacao, aResultados, !lErro)
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro na integração: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("sincronizarSistemaExterno", "SISTEMA", {"sistema" => cSistemaExterno, "operacao" => cTipoOperacao}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "resultados" => aResultados, "total" => Len(aResultados) }
+
+    /*
+     * Backup e restore de dados de qualidade
+     * Sistema completo de backup com versionamento
+     */
+    @Post("/qualidade/backup-dados")
+    action backupDadosQualidade(body)
+        Local cTipoBackup, aTabelasIncluir, cDiretorioDestino, lCompactar, lCriptografar
+        Local aArquivosGerados, oBackup, cVersao, nTamanhoTotal, lErro, cErro
+        
+        cTipoBackup := Iif(body["tipoBackup"] != Nil, AllTrim(body["tipoBackup"]), "COMPLETO") // COMPLETO, INCREMENTAL, DIFERENCIAL
+        aTabelasIncluir := Iif(body["tabelas"] != Nil, body["tabelas"], This:obterTabelasQualidade())
+        cDiretorioDestino := Iif(body["diretorioDestino"] != Nil, AllTrim(body["diretorioDestino"]), This:obterDiretorioBackupPadrao())
+        lCompactar := Iif(body["compactar"] != Nil, body["compactar"], .T.)
+        lCriptografar := Iif(body["criptografar"] != Nil, body["criptografar"], .T.)
+        
+        lErro := .F.
+        cErro := ""
+        aArquivosGerados := {}
+        nTamanhoTotal := 0
+        
+        Begin Sequence
+            // Gera versão do backup
+            cVersao := This:gerarVersaoBackup(cTipoBackup)
+            
+            // Cria diretório se não existir
+            This:criarDiretorio(cDiretorioDestino)
+            
+            // Executa backup para cada tabela
+            For nI := 1 To Len(aTabelasIncluir)
+                cTabela := aTabelasIncluir[nI]
+                
+                // Gera arquivo de backup da tabela
+                oArquivo := This:executarBackupTabela(cTabela, cDiretorioDestino, cVersao, cTipoBackup)
+                
+                If oArquivo["sucesso"] == .T.
+                    // Compacta se solicitado
+                    If lCompactar
+                        oArquivo := This:compactarArquivo(oArquivo["nomeArquivo"])
+                    EndIf
+                    
+                    // Criptografa se solicitado
+                    If lCriptografar
+                        oArquivo := This:criptografarArquivo(oArquivo["nomeArquivo"])
+                    EndIf
+                    
+                    aAdd(aArquivosGerados, oArquivo)
+                    nTamanhoTotal += oArquivo["tamanho"]
+                Else
+                    lErro := .T.
+                    cErro := "Erro no backup da tabela " + cTabela + ": " + oArquivo["erro"]
+                    Break
+                EndIf
+            Next
+            
+            If !lErro
+                // Gera arquivo de manifesto
+                oManifesto := This:gerarManifestoBackup(cVersao, aArquivosGerados, cTipoBackup)
+                
+                oBackup := {;
+                    "versao" => cVersao,;
+                    "tipoBackup" => cTipoBackup,;
+                    "dataHoraBackup" => DToS(Date()) + " " + Time(),;
+                    "diretorioDestino" => cDiretorioDestino,;
+                    "tabelasIncluidas" => aTabelasIncluir,;
+                    "arquivosGerados" => aArquivosGerados,;
+                    "tamanhoTotal" => nTamanhoTotal,;
+                    "compactado" => lCompactar,;
+                    "criptografado" => lCriptografar,;
+                    "manifesto" => oManifesto["nomeArquivo"];
+                }
+                
+                // Registra backup no histórico
+                This:registrarHistoricoBackup(oBackup)
+            EndIf
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro no backup: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("backupDadosQualidade", "SISTEMA", {"versao" => cVersao, "tipo" => cTipoBackup}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "backup" => oBackup }
+
+    /*
+     * Utilitário de limpeza e manutenção de dados de qualidade
+     * Remove dados antigos e otimiza performance
+     */
+    @Post("/qualidade/manutencao-dados")
+    action manutencaoDadosQualidade(body)
+        Local nDiasRetencao, lLimparLogs, lOtimizarTabelas, lReindexar, lCompactar
+        Local aResultados, oEstatisticas, nRegistrosRemovidos, lErro, cErro
+        
+        nDiasRetencao := Iif(body["diasRetencao"] != Nil, body["diasRetencao"], 730) // 2 anos padrão
+        lLimparLogs := Iif(body["limparLogs"] != Nil, body["limparLogs"], .T.)
+        lOtimizarTabelas := Iif(body["otimizarTabelas"] != Nil, body["otimizarTabelas"], .T.)
+        lReindexar := Iif(body["reindexar"] != Nil, body["reindexar"], .F.)
+        lCompactar := Iif(body["compactar"] != Nil, body["compactar"], .F.)
+        
+        lErro := .F.
+        cErro := ""
+        aResultados := {}
+        nRegistrosRemovidos := 0
+        
+        Begin Sequence
+            // Obtém estatísticas antes da limpeza
+            oEstatisticas := This:obterEstatisticasTabelasQualidade()
+            aAdd(aResultados, "Estatísticas iniciais coletadas")
+            
+            If lLimparLogs
+                // Remove logs antigos
+                nRemovidos := This:limparLogsAntigos(nDiasRetencao)
+                nRegistrosRemovidos += nRemovidos
+                aAdd(aResultados, "Logs removidos: " + cValToChar(nRemovidos))
+            EndIf
+            
+            // Remove dados antigos de ensaios
+            nRemovidos := This:limparEnsaiosAntigos(nDiasRetencao)
+            nRegistrosRemovidos += nRemovidos
+            aAdd(aResultados, "Ensaios antigos removidos: " + cValToChar(nRemovidos))
+            
+            // Remove certificados antigos
+            nRemovidos := This:limparCertificadosAntigos(nDiasRetencao)
+            nRegistrosRemovidos += nRemovidos
+            aAdd(aResultados, "Certificados antigos removidos: " + cValToChar(nRemovidos))
+            
+            If lOtimizarTabelas
+                // Otimiza tabelas de qualidade
+                aOtimizacao := This:otimizarTabelasQualidade()
+                aResultados := AConcat(aResultados, aOtimizacao)
+            EndIf
+            
+            If lReindexar
+                // Reconstrói índices
+                aReindexacao := This:reindexarTabelasQualidade()
+                aResultados := AConcat(aResultados, aReindexacao)
+            EndIf
+            
+            If lCompactar
+                // Compacta banco de dados
+                oCompactacao := This:compactarBancoDados()
+                aAdd(aResultados, "Compactação: " + oCompactacao["resultado"])
+            EndIf
+            
+            // Obtém estatísticas finais
+            oEstatisticasFinais := This:obterEstatisticasTabelasQualidade()
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro na manutenção: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("manutencaoDadosQualidade", "SISTEMA", {"retencao" => nDiasRetencao, "removidos" => nRegistrosRemovidos}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return {;
+            "sucesso" => .T.,;
+            "resultados" => aResultados,;
+            "registrosRemovidos" => nRegistrosRemovidos,;
+            "estatisticasIniciais" => oEstatisticas,;
+            "estatisticasFinais" => oEstatisticasFinais;
+        }
+
+    /*
+     * Configuração avançada de parâmetros do sistema de qualidade
+     * Interface para configuração de todos os aspectos do sistema
+     */
+    @Post("/qualidade/configurar-parametros")
+    action configurarParametrosQualidade(body)
+        Local oConfiguracao, aParametrosAlterados, cUsuario, lErro, cErro
+        
+        oConfiguracao := body["configuracao"]
+        cUsuario := AllTrim(body["usuario"])
+        
+        lErro := .F.
+        cErro := ""
+        aParametrosAlterados := {}
+        
+        If Empty(oConfiguracao) .Or. Empty(cUsuario)
+            Return { "sucesso" => .F., "erro" => "Configuração e usuário são obrigatórios" }
+        EndIf
+        
+        Begin Sequence
+            // Valida permissões do usuário
+            If !This:validarPermissaoConfiguracao(cUsuario)
+                Return { "sucesso" => .F., "erro" => "Usuário sem permissão para alterar configurações" }
+            EndIf
+            
+            // Processa cada categoria de configuração
+            If oConfiguracao["alertas"] != Nil
+                This:configurarAlertas(oConfiguracao["alertas"])
+                aAdd(aParametrosAlterados, "Alertas")
+            EndIf
+            
+            If oConfiguracao["certificados"] != Nil
+                This:configurarCertificados(oConfiguracao["certificados"])
+                aAdd(aParametrosAlterados, "Certificados")
+            EndIf
+            
+            If oConfiguracao["calibracao"] != Nil
+                This:configurarCalibracao(oConfiguracao["calibracao"])
+                aAdd(aParametrosAlterados, "Calibração")
+            EndIf
+            
+            If oConfiguracao["relatorios"] != Nil
+                This:configurarRelatorios(oConfiguracao["relatorios"])
+                aAdd(aParametrosAlterados, "Relatórios")
+            EndIf
+            
+            If oConfiguracao["integracoes"] != Nil
+                This:configurarIntegracoes(oConfiguracao["integracoes"])
+                aAdd(aParametrosAlterados, "Integrações")
+            EndIf
+            
+            If oConfiguracao["backup"] != Nil
+                This:configurarBackup(oConfiguracao["backup"])
+                aAdd(aParametrosAlterados, "Backup")
+            EndIf
+            
+            // Registra alterações
+            This:registrarAlteracaoConfiguracao(cUsuario, aParametrosAlterados, oConfiguracao)
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro na configuração: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("configurarParametrosQualidade", cUsuario, {"parametros" => aParametrosAlterados}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return {;
+            "sucesso" => .T.,;
+            "parametrosAlterados" => aParametrosAlterados,;
+            "totalAlteracoes" => Len(aParametrosAlterados);
+        }
+
+    /*
+     * Monitor de saúde do sistema de qualidade
+     * Verifica integridade e performance do sistema
+     */
+    @Get("/qualidade/monitorar-saude-sistema")
+    action monitorarSaudeSistema(params)
+        Local oSaude, aVerificacoes, nPontuacao, cStatus, lErro, cErro
+        
+        lErro := .F.
+        cErro := ""
+        aVerificacoes := {}
+        nPontuacao := 0
+        
+        Begin Sequence
+            // Verifica conectividade com banco
+            aAdd(aVerificacoes, This:verificarConectividadeBanco())
+            
+            // Verifica integridade das tabelas
+            aAdd(aVerificacoes, This:verificarIntegridadeTabelas())
+            
+            // Verifica performance das consultas
+            aAdd(aVerificacoes, This:verificarPerformanceConsultas())
+            
+            // Verifica espaço em disco
+            aAdd(aVerificacoes, This:verificarEspacoDisco())
+            
+            // Verifica status dos serviços
+            aAdd(aVerificacoes, This:verificarStatusServicos())
+            
+            // Verifica integrações externas
+            aAdd(aVerificacoes, This:verificarIntegracoesExternas())
+            
+            // Verifica backups
+            aAdd(aVerificacoes, This:verificarStatusBackups())
+            
+            // Calcula pontuação geral
+            For nI := 1 To Len(aVerificacoes)
+                If aVerificacoes[nI]["status"] == "OK"
+                    nPontuacao += aVerificacoes[nI]["peso"]
+                ElseIf aVerificacoes[nI]["status"] == "ATENCAO"
+                    nPontuacao += aVerificacoes[nI]["peso"] * 0.5
+                EndIf
+            Next
+            
+            // Define status geral
+            If nPontuacao >= 90
+                cStatus := "EXCELENTE"
+            ElseIf nPontuacao >= 75
+                cStatus := "BOM"
+            ElseIf nPontuacao >= 60
+                cStatus := "ATENCAO"
+            Else
+                cStatus := "CRITICO"
+            EndIf
+            
+            oSaude := {;
+                "dataHoraVerificacao" => DToS(Date()) + " " + Time(),;
+                "statusGeral" => cStatus,;
+                "pontuacaoGeral" => nPontuacao,;
+                "verificacoes" => aVerificacoes,;
+                "recomendacoes" => This:gerarRecomendacoesSaude(aVerificacoes);
+            }
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro no monitoramento: " + oErr:Description
+        End Sequence
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "saudeSistema" => oSaude }
+
+    // =====================================================================
+    // MÉTODOS AUXILIARES - PARTE 5
+    // =====================================================================
+    
+    /*
+     * Prepara dados para envio a sistema externo
+     */
+    Method prepararDadosEnvio(cSistemaExterno, aDados)
+        Local aDadosPreparados, nI, oItem
+        
+        aDadosPreparados := {}
+        
+        For nI := 1 To Len(aDados)
+            oItem := aDados[nI]
+            
+            // Adapta formato conforme sistema externo
+            If cSistemaExterno == "LIMS"
+                oItem := This:formatarParaLIMS(oItem)
+            ElseIf cSistemaExterno == "ERP_MATRIZ"
+                oItem := This:formatarParaERPMatriz(oItem)
+            EndIf
+            
+            aAdd(aDadosPreparados, oItem)
+        Next
+        
+        Return aDadosPreparados
+
+    /*
+     * Obtém tabelas de qualidade para backup
+     */
+    Method obterTabelasQualidade()
+        Local aTabelas
+        
+        aTabelas := {;
+            "QAD010", "QM0010", "QM1010", "QM9010",;
+            "QDH010", "QDO010", "QAB010", "QAC010";
+        }
+        
+        Return aTabelas
+
+    /*
+     * Executa backup de uma tabela específica
+     */
+    Method executarBackupTabela(cTabela, cDiretorio, cVersao, cTipoBackup)
+        Local cNomeArquivo, cQuery, oArquivo, nTamanho
+        
+        cNomeArquivo := cDiretorio + "\" + cTabela + "_" + cVersao + ".sql"
+        
+        If cTipoBackup == "COMPLETO"
+            cQuery := "SELECT * FROM " + cTabela + " WHERE D_E_L_E_T_ = ''"
+        ElseIf cTipoBackup == "INCREMENTAL"
+            cQuery := "SELECT * FROM " + cTabela + " WHERE D_E_L_E_T_ = '' AND R_E_C_N_O_ > " + This:obterUltimoRecnoBackup(cTabela)
+        EndIf
+        
+        // Executa exportação (implementação específica do banco)
+        oArquivo := This:exportarTabelaParaArquivo(cQuery, cNomeArquivo)
+        
+        Return oArquivo
+
+    /*
+     * Verifica conectividade com banco de dados
+     */
+    Method verificarConectividadeBanco()
+        Local oVerificacao, lConectado, nTempoResposta, cErro
+        
+        lConectado := .F.
+        nTempoResposta := 0
+        cErro := ""
+        
+        Begin Sequence
+            nInicio := Seconds()
+            // Executa query simples para testar conexão
+            aDados := This:executarQuery("SELECT COUNT(*) AS QTD FROM SX2010 WHERE X2_CHAVE = 'QAD'")
+            nTempoResposta := Seconds() - nInicio
+            
+            lConectado := !Empty(aDados) .And. aDados[1]["QTD"] > 0
+            
+        Recover Using oErr
+            cErro := oErr:Description
+        End Sequence
+        
+        oVerificacao := {;
+            "item" => "Conectividade Banco",;
+            "status" => Iif(lConectado, "OK", "ERRO"),;
+            "detalhes" => Iif(lConectado, "Tempo: " + cValToChar(nTempoResposta) + "s", cErro),;
+            "peso" => 20;
+        }
+        
+        Return oVerificacao
+
+    /*
+     * Gera código único para auditoria
+     */
+    Method gerarCodigoAuditoria(cTipo)
+        Local cCodigo
+        
+        cCodigo := "AUD" + cTipo + DToS(Date()) + StrTran(Time(), ":", "")
+        
+        Return cCodigo
+
+    /*
+     * Gera código único para ação corretiva
+     */
+    Method gerarCodigoAcaoCorretiva(cTipo)
+        Local cCodigo
+        
+        cCodigo := Iif(cTipo == "CORRETIVA", "AC", "AP") + DToS(Date()) + StrTran(Time(), ":", "")
+        
+        Return cCodigo
+
 EndClass
