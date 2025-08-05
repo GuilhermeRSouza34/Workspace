@@ -1021,4 +1021,515 @@ Class QualidadeAvancada
         
         Return .T.
 
+    // =====================================================================
+    // PARTE 3: RASTREABILIDADE COMPLETA E CALIBRAÇÃO DE EQUIPAMENTOS
+    // =====================================================================
+
+    /*
+     * Sistema completo de rastreabilidade de lotes
+     * Permite rastrear origem e destino de qualquer lote na cadeia produtiva
+     */
+    @Get("/qualidade/rastreabilidade/:lote")
+    action rastreabilidadeLote(params)
+        Local cLote, cProduto, cDirecao, oRastreamento, aOrigens, aDestinos
+        Local aArvoreCompleta, lErro, cErro
+        
+        cLote := AllTrim(params["lote"])
+        cProduto := Iif(params["produto"] != Nil, AllTrim(params["produto"]), "")
+        cDirecao := Iif(params["direcao"] != Nil, AllTrim(params["direcao"]), "COMPLETA") // ORIGEM, DESTINO, COMPLETA
+        
+        lErro := .F.
+        cErro := ""
+        
+        If Empty(cLote)
+            Return { "sucesso" => .F., "erro" => "Número do lote é obrigatório" }
+        EndIf
+        
+        Begin Sequence
+            // Rastreamento para trás (origens)
+            If cDirecao $ "ORIGEM|COMPLETA"
+                aOrigens := This:rastrearOrigens(cLote, cProduto)
+            Else
+                aOrigens := {}
+            EndIf
+            
+            // Rastreamento para frente (destinos)
+            If cDirecao $ "DESTINO|COMPLETA"
+                aDestinos := This:rastrearDestinos(cLote, cProduto)
+            Else
+                aDestinos := {}
+            EndIf
+            
+            // Monta árvore completa de rastreamento
+            aArvoreCompleta := This:montarArvoreRastreamento(cLote, cProduto, aOrigens, aDestinos)
+            
+            oRastreamento := {;
+                "lote" => cLote,;
+                "produto" => cProduto,;
+                "direcaoConsulta" => cDirecao,;
+                "dataConsulta" => DToS(Date()) + " " + Time(),;
+                "origens" => aOrigens,;
+                "destinos" => aDestinos,;
+                "arvoreCompleta" => aArvoreCompleta,;
+                "totalNiveis" => This:calcularNiveisRastreamento(aArvoreCompleta),;
+                "conformidade" => This:verificarConformidadeRastreamento(aArvoreCompleta);
+            }
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro na rastreabilidade: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("rastreabilidadeLote", "SISTEMA", {"lote" => cLote, "direcao" => cDirecao}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "rastreamento" => oRastreamento }
+
+    /*
+     * Sistema de calibração de instrumentos e equipamentos
+     * Controla agenda, histórico e status de calibração
+     */
+    @Get("/qualidade/calibracoes")
+    action gerenciarCalibracoes(params)
+        Local cStatus, dDataIni, dDataFim, cInstrumento, aCalibracoes, aCalibracoesPendentes
+        Local aCalibracaoVencidas, aCalibracaoProximas, lErro, cErro
+        
+        cStatus := Iif(params["status"] != Nil, AllTrim(params["status"]), "TODOS")
+        dDataIni := Iif(!Empty(params["dataInicio"]), SToD(StrTran(params["dataInicio"], "-", "")), Date() - 30)
+        dDataFim := Iif(!Empty(params["dataFim"]), SToD(StrTran(params["dataFim"], "-", "")), Date() + 60)
+        cInstrumento := Iif(params["instrumento"] != Nil, AllTrim(params["instrumento"]), "")
+        
+        lErro := .F.
+        cErro := ""
+        aCalibracoes := {}
+        
+        Begin Sequence
+            // Busca calibrações no período
+            aCalibracoes := This:buscarCalibracoes(dDataIni, dDataFim, cInstrumento, cStatus)
+            
+            // Identifica calibrações vencidas
+            aCalibracaoVencidas := This:identificarCalibracaoVencidas()
+            
+            // Identifica calibrações próximas do vencimento
+            aCalibracaoProximas := This:identificarCalibracaoProximas(30) // 30 dias
+            
+            // Calibrações pendentes de execução
+            aCalibracoesPendentes := This:identificarCalibracoesPendentes()
+            
+            // Atualiza status automático baseado nas datas
+            This:atualizarStatusCalibracoes(aCalibracoes)
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro no gerenciamento de calibrações: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("gerenciarCalibracoes", "SISTEMA", {"periodo" => DToS(dDataIni) + "-" + DToS(dDataFim)}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "calibracoes" => aCalibracoes, "vencidas" => aCalibracaoVencidas, "proximas" => aCalibracaoProximas, "pendentes" => aCalibracoesPendentes }
+
+    /*
+     * Programador automático de calibrações baseado em criticidade e uso
+     * Otimiza agenda de calibrações considerando múltiplos fatores
+     */
+    @Post("/qualidade/programar-calibracoes")
+    action programarCalibracoes(body)
+        Local nPeriodoPrograma, cCriticidade, aProgramacao, aInstrumentos, nI, oInstrumento
+        Local dProximaCalibra, nFrequenciaOtima, cJustificativa, lErro, cErro
+        
+        nPeriodoPrograma := Iif(body["periodoPrograma"] != Nil, body["periodoPrograma"], 365) // dias
+        cCriticidade := Iif(body["criticidade"] != Nil, AllTrim(body["criticidade"]), "TODAS")
+        
+        lErro := .F.
+        cErro := ""
+        aProgramacao := {}
+        
+        Begin Sequence
+            // Busca instrumentos que precisam de programação
+            aInstrumentos := This:buscarInstrumentosAtivos(cCriticidade)
+            
+            For nI := 1 To Len(aInstrumentos)
+                oInstrumento := aInstrumentos[nI]
+                
+                // Calcula frequência ótima baseada em uso e histórico
+                nFrequenciaOtima := This:calcularFrequenciaOtima(oInstrumento["codigo"], oInstrumento["criticidade"])
+                
+                // Calcula próxima data de calibração
+                dProximaCalibra := This:calcularProximaCalibra(oInstrumento["ultimaCalibra"], nFrequenciaOtima)
+                
+                // Gera justificativa da programação
+                cJustificativa := This:gerarJustificativaCalibra(oInstrumento, nFrequenciaOtima)
+                
+                // Verifica disponibilidade na agenda
+                If This:verificarDisponibilidadeAgenda(dProximaCalibra)
+                    oInstrumento["proximaCalibra"] := dProximaCalibra
+                    oInstrumento["status"] := "PROGRAMADA"
+                Else
+                    // Busca próxima data disponível
+                    dProximaCalibra := This:buscarProximaDataDisponivel(dProximaCalibra)
+                    oInstrumento["proximaCalibra"] := dProximaCalibra
+                    oInstrumento["status"] := "REPROGRAMADA"
+                EndIf
+                
+                oInstrumento["frequenciaOtima"] := nFrequenciaOtima
+                oInstrumento["justificativa"] := cJustificativa
+                
+                // Registra programação no sistema
+                This:registrarProgramacaoCalibra(oInstrumento)
+                
+                aAdd(aProgramacao, oInstrumento)
+            Next
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro na programação de calibrações: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("programarCalibracoes", "SISTEMA", {"periodo" => nPeriodoPrograma, "criticidade" => cCriticidade}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "programacao" => aProgramacao, "totalInstrumentos" => Len(aProgramacao) }
+
+    /*
+     * Executar calibração e registrar resultados
+     * Permite registrar calibração realizada com resultados e certificados
+     */
+    @Post("/qualidade/executar-calibracao")
+    action executarCalibracao(body)
+        Local cInstrumento, dDataCalibra, cResponsavel, cLaboratorio, aCertificados
+        Local aResultados, cObservacoes, oCalibra, lAprovado, dProximaCalibra, lErro, cErro
+        
+        cInstrumento := AllTrim(body["instrumento"])
+        dDataCalibra := SToD(StrTran(body["dataCalibra"], "-", ""))
+        cResponsavel := AllTrim(body["responsavel"])
+        cLaboratorio := Iif(body["laboratorio"] != Nil, AllTrim(body["laboratorio"]), "")
+        aCertificados := Iif(body["certificados"] != Nil, body["certificados"], {})
+        aResultados := Iif(body["resultados"] != Nil, body["resultados"], {})
+        cObservacoes := Iif(body["observacoes"] != Nil, body["observacoes"], "")
+        
+        lErro := .F.
+        cErro := ""
+        
+        If Empty(cInstrumento) .Or. Empty(dDataCalibra) .Or. Empty(cResponsavel)
+            Return { "sucesso" => .F., "erro" => "Instrumento, data e responsável são obrigatórios" }
+        EndIf
+        
+        Begin Sequence
+            // Valida se instrumento existe e está ativo
+            If !This:validarInstrumentoAtivo(cInstrumento)
+                Return { "sucesso" => .F., "erro" => "Instrumento não encontrado ou inativo" }
+            EndIf
+            
+            // Analisa resultados da calibração
+            lAprovado := This:analisarResultadosCalibra(aResultados)
+            
+            // Calcula próxima calibração baseada no resultado
+            dProximaCalibra := This:calcularProximaCalibracaoPorResultado(dDataCalibra, lAprovado, cInstrumento)
+            
+            oCalibra := {;
+                "instrumento" => cInstrumento,;
+                "dataCalibra" => DToS(dDataCalibra),;
+                "responsavel" => cResponsavel,;
+                "laboratorio" => cLaboratorio,;
+                "aprovado" => lAprovado,;
+                "resultados" => aResultados,;
+                "certificados" => aCertificados,;
+                "observacoes" => cObservacoes,;
+                "proximaCalibra" => DToS(dProximaCalibra),;
+                "dataRegistro" => DToS(Date()),;
+                "horaRegistro" => Time();
+            }
+            
+            // Registra calibração executada
+            This:registrarCalibraExecutada(oCalibra)
+            
+            // Atualiza status do instrumento
+            This:atualizarStatusInstrumento(cInstrumento, lAprovado, dDataCalibra, dProximaCalibra)
+            
+            // Gera alertas se reprovado
+            If !lAprovado
+                This:gerarAlertaInstrumentoReprovado(cInstrumento, aResultados)
+            EndIf
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro na execução da calibração: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("executarCalibracao", cResponsavel, {"instrumento" => cInstrumento, "aprovado" => lAprovado}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "calibracao" => oCalibra, "proximaCalibra" => DToS(dProximaCalibra) }
+
+    /*
+     * Dashboard de controle de instrumentos
+     * Visão executiva do status de calibração dos instrumentos
+     */
+    @Get("/qualidade/dashboard-instrumentos")
+    action dashboardInstrumentos(params)
+        Local cDepartamento, cCriticidade, oDashboard, aKPIs, aInstrumentosStatus
+        Local aTop10Criticos, aHistoricoMensal, lErro, cErro
+        
+        cDepartamento := Iif(params["departamento"] != Nil, AllTrim(params["departamento"]), "")
+        cCriticidade := Iif(params["criticidade"] != Nil, AllTrim(params["criticidade"]), "")
+        
+        lErro := .F.
+        cErro := ""
+        
+        Begin Sequence
+            // KPIs principais de instrumentos
+            aKPIs := This:calcularKPIsInstrumentos(cDepartamento, cCriticidade)
+            
+            // Status atual dos instrumentos
+            aInstrumentosStatus := This:obterStatusInstrumentos(cDepartamento, cCriticidade)
+            
+            // Top 10 instrumentos críticos
+            aTop10Criticos := This:identificarInstrumentosCriticos(10)
+            
+            // Histórico mensal de calibrações
+            aHistoricoMensal := This:obterHistoricoMensalCalibra(12) // 12 meses
+            
+            oDashboard := {;
+                "dataAtualizacao" => DToS(Date()) + " " + Time(),;
+                "filtros" => {;
+                    "departamento" => cDepartamento,;
+                    "criticidade" => cCriticidade;
+                },;
+                "kpis" => aKPIs,;
+                "statusInstrumentos" => aInstrumentosStatus,;
+                "instrumentosCriticos" => aTop10Criticos,;
+                "historicoMensal" => aHistoricoMensal,;
+                "alertas" => This:gerarAlertasInstrumentos();
+            }
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro no dashboard de instrumentos: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("dashboardInstrumentos", "SISTEMA", {"departamento" => cDepartamento}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "dashboard" => oDashboard }
+
+    // =====================================================================
+    // MÉTODOS AUXILIARES - PARTE 3
+    // =====================================================================
+    
+    /*
+     * Rastreia origens de um lote (backward tracking)
+     */
+    Method rastrearOrigens(cLote, cProduto)
+        Local cQuery, aDados, aOrigens, nI, oOrigem, aSubOrigens
+        
+        // Busca componentes que originaram o lote
+        cQuery := "SELECT DISTINCT D4_COD AS PRODUTO_ORIGEM, D4_LOTECTL AS LOTE_ORIGEM, " +;
+                 "D4_OP AS OP, B1_DESC AS DESCRICAO FROM SD4010 D4 " +;
+                 "INNER JOIN SC2010 C2 ON D4_OP = C2_NUM+C2_ITEM+C2_SEQUEN AND C2.D_E_L_E_T_ = '' " +;
+                 "INNER JOIN SB1010 B1 ON D4_COD = B1_COD AND B1.D_E_L_E_T_ = '' " +;
+                 "WHERE D4.D_E_L_E_T_ = '' " +;
+                 "AND EXISTS (SELECT 1 FROM SC2010 WHERE C2_NUM+C2_ITEM+C2_SEQUEN = D4_OP " +;
+                 "AND C2_PRODUTO = '" + cProduto + "' AND C2_LOTECTL = '" + cLote + "' AND D_E_L_E_T_ = '')"
+        
+        aDados := This:executarQuery(cQuery)
+        aOrigens := {}
+        
+        For nI := 1 To Len(aDados)
+            // Busca sub-origens recursivamente
+            aSubOrigens := This:rastrearOrigens(aDados[nI]["LOTE_ORIGEM"], aDados[nI]["PRODUTO_ORIGEM"])
+            
+            oOrigem := {;
+                "nivel" => 1,;
+                "produtoOrigem" => aDados[nI]["PRODUTO_ORIGEM"],;
+                "loteOrigem" => aDados[nI]["LOTE_ORIGEM"],;
+                "descricao" => aDados[nI]["DESCRICAO"],;
+                "op" => aDados[nI]["OP"],;
+                "subOrigens" => aSubOrigens;
+            }
+            
+            aAdd(aOrigens, oOrigem)
+        Next
+        
+        Return aOrigens
+
+    /*
+     * Rastreia destinos de um lote (forward tracking)
+     */
+    Method rastrearDestinos(cLote, cProduto)
+        Local cQuery, aDados, aDestinos, nI, oDestino, aSubDestinos
+        
+        // Busca onde o lote foi utilizado
+        cQuery := "SELECT DISTINCT C2_PRODUTO AS PRODUTO_DESTINO, C2_LOTECTL AS LOTE_DESTINO, " +;
+                 "C2_NUM AS OP, B1_DESC AS DESCRICAO FROM SC2010 C2 " +;
+                 "INNER JOIN SD4010 D4 ON C2_NUM+C2_ITEM+C2_SEQUEN = D4_OP AND D4.D_E_L_E_T_ = '' " +;
+                 "INNER JOIN SB1010 B1 ON C2_PRODUTO = B1_COD AND B1.D_E_L_E_T_ = '' " +;
+                 "WHERE C2.D_E_L_E_T_ = '' " +;
+                 "AND D4_COD = '" + cProduto + "' AND D4_LOTECTL = '" + cLote + "'"
+        
+        aDados := This:executarQuery(cQuery)
+        aDestinos := {}
+        
+        For nI := 1 To Len(aDados)
+            // Busca sub-destinos recursivamente
+            aSubDestinos := This:rastrearDestinos(aDados[nI]["LOTE_DESTINO"], aDados[nI]["PRODUTO_DESTINO"])
+            
+            oDestino := {;
+                "nivel" => 1,;
+                "produtoDestino" => aDados[nI]["PRODUTO_DESTINO"],;
+                "loteDestino" => aDados[nI]["LOTE_DESTINO"],;
+                "descricao" => aDados[nI]["DESCRICAO"],;
+                "op" => aDados[nI]["OP"],;
+                "subDestinos" => aSubDestinos;
+            }
+            
+            aAdd(aDestinos, oDestino)
+        Next
+        
+        Return aDestinos
+
+    /*
+     * Busca calibrações no período especificado
+     */
+    Method buscarCalibracoes(dDataIni, dDataFim, cInstrumento, cStatus)
+        Local cQuery, aDados, aCalibracoes, nI, oCalibra
+        
+        cQuery := "SELECT QM1_INSTRU, QM1_DESC, QM1_PERIOD, QM1_ULTCAL, QM1_PROXCA, " +;
+                 "QM1_STATUS, QM1_DEPTO, QM1_RESPONS FROM QM1010 " +;
+                 "WHERE D_E_L_E_T_ = '' " +;
+                 "AND QM1_PROXCA BETWEEN '" + DToS(dDataIni) + "' AND '" + DToS(dDataFim) + "'"
+        
+        If !Empty(cInstrumento)
+            cQuery += " AND QM1_INSTRU = '" + cInstrumento + "'"
+        EndIf
+        
+        If !Empty(cStatus) .And. cStatus != "TODOS"
+            cQuery += " AND QM1_STATUS = '" + cStatus + "'"
+        EndIf
+        
+        aDados := This:executarQuery(cQuery)
+        aCalibracoes := {}
+        
+        For nI := 1 To Len(aDados)
+            oCalibra := {;
+                "instrumento" => aDados[nI]["QM1_INSTRU"],;
+                "descricao" => aDados[nI]["QM1_DESC"],;
+                "periodicidade" => aDados[nI]["QM1_PERIOD"],;
+                "ultimaCalibra" => aDados[nI]["QM1_ULTCAL"],;
+                "proximaCalibra" => aDados[nI]["QM1_PROXCA"],;
+                "status" => aDados[nI]["QM1_STATUS"],;
+                "departamento" => aDados[nI]["QM1_DEPTO"],;
+                "responsavel" => aDados[nI]["QM1_RESPONS"],;
+                "diasVencimento" => SToD(aDados[nI]["QM1_PROXCA"]) - Date();
+            }
+            
+            aAdd(aCalibracoes, oCalibra)
+        Next
+        
+        Return aCalibracoes
+
+    /*
+     * Calcula frequência ótima de calibração baseada em uso e criticidade
+     */
+    Method calcularFrequenciaOtima(cInstrumento, cCriticidade)
+        Local nFrequenciaAtual, nFrequenciaUso, nFrequenciaOtima, nFatorCriticidade
+        
+        // Busca frequência atual
+        nFrequenciaAtual := This:obterFrequenciaAtual(cInstrumento)
+        
+        // Calcula frequência baseada no uso
+        nFrequenciaUso := This:calcularFrequenciaPorUso(cInstrumento)
+        
+        // Fator de criticidade
+        If cCriticidade == "ALTA"
+            nFatorCriticidade := 0.8  // Reduz 20% do período
+        ElseIf cCriticidade == "MEDIA"
+            nFatorCriticidade := 1.0  // Mantém período
+        Else
+            nFatorCriticidade := 1.2  // Aumenta 20% do período
+        EndIf
+        
+        // Calcula frequência ótima
+        nFrequenciaOtima := Round((nFrequenciaAtual + nFrequenciaUso) / 2 * nFatorCriticidade, 0)
+        
+        // Limites mínimo e máximo
+        nFrequenciaOtima := Max(30, Min(365, nFrequenciaOtima))
+        
+        Return nFrequenciaOtima
+
+    /*
+     * Calcula KPIs de instrumentos
+     */
+    Method calcularKPIsInstrumentos(cDepartamento, cCriticidade)
+        Local cQuery, aDados, aKPIs, nTotal, nVencidos, nProximos, nAprovados
+        
+        cQuery := "SELECT COUNT(*) AS TOTAL, " +;
+                 "SUM(CASE WHEN QM1_PROXCA < '" + DToS(Date()) + "' THEN 1 ELSE 0 END) AS VENCIDOS, " +;
+                 "SUM(CASE WHEN QM1_PROXCA BETWEEN '" + DToS(Date()) + "' AND '" + DToS(Date()+30) + "' THEN 1 ELSE 0 END) AS PROXIMOS, " +;
+                 "SUM(CASE WHEN QM1_STATUS = 'A' THEN 1 ELSE 0 END) AS APROVADOS " +;
+                 "FROM QM1010 WHERE D_E_L_E_T_ = ''"
+        
+        If !Empty(cDepartamento)
+            cQuery += " AND QM1_DEPTO = '" + cDepartamento + "'"
+        EndIf
+        
+        aDados := This:executarQuery(cQuery)
+        
+        If !Empty(aDados)
+            nTotal := aDados[1]["TOTAL"]
+            nVencidos := aDados[1]["VENCIDOS"]
+            nProximos := aDados[1]["PROXIMOS"]
+            nAprovados := aDados[1]["APROVADOS"]
+        Else
+            nTotal := 0
+            nVencidos := 0
+            nProximos := 0
+            nAprovados := 0
+        EndIf
+        
+        aKPIs := {;
+            "totalInstrumentos" => nTotal,;
+            "calibracaoVencida" => nVencidos,;
+            "calibracaoProxima" => nProximos,;
+            "instrumentosAprovados" => nAprovados,;
+            "percentualConformidade" => Iif(nTotal > 0, Round(((nTotal - nVencidos) / nTotal) * 100, 2), 100),;
+            "status" => Iif(nVencidos == 0, "CONFORME", Iif(nVencidos <= (nTotal * 0.05), "ATENCAO", "CRITICO"));
+        }
+        
+        Return aKPIs
+
+    /*
+     * Monta árvore completa de rastreamento
+     */
+    Method montarArvoreRastreamento(cLote, cProduto, aOrigens, aDestinos)
+        Local aArvore, oNo
+        
+        oNo := {;
+            "lote" => cLote,;
+            "produto" => cProduto,;
+            "nivel" => 0,;
+            "tipo" => "PRINCIPAL",;
+            "origens" => aOrigens,;
+            "destinos" => aDestinos;
+        }
+        
+        aArvore := { oNo }
+        
+        Return aArvore
+
 EndClass
