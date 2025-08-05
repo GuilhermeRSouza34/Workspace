@@ -280,6 +280,584 @@ Class QualidadeAvancada
         Return { "sucesso" => .T., "alertas" => aAlertas, "total" => nTotal, "dataConsulta" => DToS(Date()) + " " + Time() }
 
     // =====================================================================
+    // PARTE 2: PLANOS DE AMOSTRAGEM DINÂMICOS E CERTIFICADOS AUTOMÁTICOS
+    // =====================================================================
+
+    /*
+     * Otimizador de planos de amostragem baseado em histórico de qualidade
+     * Ajusta automaticamente o tamanho da amostra baseado na performance
+     */
+    @Post("/qualidade/otimizar-amostragem")
+    action otimizarAmostragem(body)
+        Local cProduto, cFornecedor, nPeriodoAnalise, aPlanos, oPlano, nI
+        Local nTaxaConformidade, nNovoTamanho, cJustificativa, lErro, cErro
+        
+        cProduto := Iif(body["produto"] != Nil, AllTrim(body["produto"]), "")
+        cFornecedor := Iif(body["fornecedor"] != Nil, AllTrim(body["fornecedor"]), "")
+        nPeriodoAnalise := Iif(body["periodoAnalise"] != Nil, body["periodoAnalise"], 90)
+        
+        lErro := .F.
+        cErro := ""
+        aPlanos := {}
+        
+        Begin Sequence
+            // Busca planos de amostragem atuais
+            aPlanos := This:buscarPlanosAmostragem(cProduto, cFornecedor)
+            
+            For nI := 1 To Len(aPlanos)
+                oPlano := aPlanos[nI]
+                
+                // Analisa histórico de qualidade
+                nTaxaConformidade := This:calcularTaxaConformidade(oPlano["produto"], oPlano["fornecedor"], nPeriodoAnalise)
+                
+                // Aplica algoritmo de otimização
+                nNovoTamanho := This:calcularNovoTamanhoAmostra(oPlano["tamanhoAtual"], nTaxaConformidade, oPlano["criticidade"])
+                
+                // Gera justificativa da mudança
+                cJustificativa := This:gerarJustificativaAmostragem(nTaxaConformidade, oPlano["tamanhoAtual"], nNovoTamanho)
+                
+                // Atualiza plano se houve mudança significativa
+                If Abs(nNovoTamanho - oPlano["tamanhoAtual"]) > 1
+                    This:atualizarPlanoAmostragem(oPlano["codigo"], nNovoTamanho, cJustificativa)
+                    oPlano["novoTamanho"] := nNovoTamanho
+                    oPlano["alterado"] := .T.
+                    oPlano["justificativa"] := cJustificativa
+                Else
+                    oPlano["novoTamanho"] := oPlano["tamanhoAtual"]
+                    oPlano["alterado"] := .F.
+                    oPlano["justificativa"] := "Tamanho da amostra mantido - performance estável"
+                EndIf
+                
+                oPlano["taxaConformidade"] := nTaxaConformidade
+            Next
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro na otimização de amostragem: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("otimizarAmostragem", "SISTEMA", {"produto" => cProduto, "fornecedor" => cFornecedor}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "planos" => aPlanos, "totalPlanos" => Len(aPlanos), "dataOtimizacao" => DToS(Date()) }
+
+    /*
+     * Gerador automático de certificados de qualidade
+     * Cria certificados baseados em templates e resultados de ensaios
+     */
+    @Post("/qualidade/gerar-certificado")
+    action gerarCertificado(body)
+        Local cLote, cProduto, cTipoCertificado, cTemplate, cDestinatario
+        Local aDadosEnsaios, oCertificado, cConteudo, cNomeArquivo, lErro, cErro
+        
+        cLote := AllTrim(body["lote"])
+        cProduto := AllTrim(body["produto"])
+        cTipoCertificado := AllTrim(body["tipoCertificado"]) // CONFORMIDADE, ANALISE, LAUDO
+        cTemplate := Iif(body["template"] != Nil, AllTrim(body["template"]), "")
+        cDestinatario := Iif(body["destinatario"] != Nil, AllTrim(body["destinatario"]), "")
+        
+        lErro := .F.
+        cErro := ""
+        
+        If Empty(cLote) .Or. Empty(cProduto) .Or. Empty(cTipoCertificado)
+            Return { "sucesso" => .F., "erro" => "Lote, produto e tipo de certificado são obrigatórios" }
+        EndIf
+        
+        Begin Sequence
+            // Busca dados dos ensaios do lote
+            aDadosEnsaios := This:buscarDadosEnsaios(cLote, cProduto)
+            
+            If Empty(aDadosEnsaios)
+                Return { "sucesso" => .F., "erro" => "Nenhum ensaio encontrado para o lote especificado" }
+            EndIf
+            
+            // Verifica se lote foi aprovado
+            If !This:verificarLoteAprovado(aDadosEnsaios)
+                Return { "sucesso" => .F., "erro" => "Certificado só pode ser gerado para lotes aprovados" }
+            EndIf
+            
+            // Busca template do certificado
+            If Empty(cTemplate)
+                cTemplate := This:buscarTemplatePadrao(cTipoCertificado)
+            EndIf
+            
+            // Gera conteúdo do certificado
+            cConteudo := This:montarCertificado(cTemplate, aDadosEnsaios, cTipoCertificado)
+            
+            // Gera nome do arquivo
+            cNomeArquivo := This:gerarNomeArquivoCertificado(cLote, cProduto, cTipoCertificado)
+            
+            // Salva certificado
+            MemoWrite(cNomeArquivo, cConteudo)
+            
+            // Registra certificado no sistema
+            oCertificado := {;
+                "lote" => cLote,;
+                "produto" => cProduto,;
+                "tipoCertificado" => cTipoCertificado,;
+                "nomeArquivo" => cNomeArquivo,;
+                "dataGeracao" => DToS(Date()),;
+                "horaGeracao" => Time(),;
+                "destinatario" => cDestinatario,;
+                "status" => "GERADO";
+            }
+            
+            This:registrarCertificado(oCertificado)
+            
+            // Envia por email se destinatário especificado
+            If !Empty(cDestinatario)
+                This:enviarCertificadoPorEmail(oCertificado, cDestinatario)
+                oCertificado["emailEnviado"] := .T.
+            EndIf
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro na geração do certificado: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("gerarCertificado", "SISTEMA", {"lote" => cLote, "tipo" => cTipoCertificado}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "certificado" => oCertificado, "arquivo" => cNomeArquivo }
+
+    /*
+     * Sistema de monitoramento automático de lotes
+     * Monitora ensaios em andamento e dispara ações automáticas
+     */
+    @Get("/qualidade/monitorar-lotes")
+    action monitorarLotes(params)
+        Local cStatus, dDataIni, dDataFim, aLotes, aLotesMonitorados, nI, oLote
+        Local aAcoesDisparo, lErro, cErro
+        
+        cStatus := Iif(params["status"] != Nil, AllTrim(params["status"]), "TODOS")
+        dDataIni := Iif(!Empty(params["dataInicio"]), SToD(StrTran(params["dataInicio"], "-", "")), Date() - 7)
+        dDataFim := Iif(!Empty(params["dataFim"]), SToD(StrTran(params["dataFim"], "-", "")), Date())
+        
+        lErro := .F.
+        cErro := ""
+        aLotesMonitorados := {}
+        aAcoesDisparo := {}
+        
+        Begin Sequence
+            // Busca lotes no período
+            aLotes := This:buscarLotesEnsaios(dDataIni, dDataFim, cStatus)
+            
+            For nI := 1 To Len(aLotes)
+                oLote := aLotes[nI]
+                
+                // Verifica status atual do lote
+                oLote["statusAtual"] := This:verificarStatusLote(oLote["lote"], oLote["produto"])
+                
+                // Verifica se precisa de ações automáticas
+                If oLote["statusAtual"] == "APROVADO"
+                    // Verifica se certificado já foi gerado
+                    If !This:certificadoJaGerado(oLote["lote"], oLote["produto"])
+                        aAdd(aAcoesDisparo, {;
+                            "acao" => "GERAR_CERTIFICADO",;
+                            "lote" => oLote["lote"],;
+                            "produto" => oLote["produto"],;
+                            "prioridade" => "MEDIA";
+                        })
+                    EndIf
+                    
+                    // Verifica se precisa atualizar estoque
+                    If This:precisaAtualizarEstoque(oLote["lote"])
+                        aAdd(aAcoesDisparo, {;
+                            "acao" => "LIBERAR_ESTOQUE",;
+                            "lote" => oLote["lote"],;
+                            "produto" => oLote["produto"],;
+                            "prioridade" => "ALTA";
+                        })
+                    EndIf
+                    
+                ElseIf oLote["statusAtual"] == "REPROVADO"
+                    // Verifica se precisa de ação corretiva
+                    aAdd(aAcoesDisparo, {;
+                        "acao" => "ACAO_CORRETIVA",;
+                        "lote" => oLote["lote"],;
+                        "produto" => oLote["produto"],;
+                        "prioridade" => "CRITICA";
+                    })
+                    
+                ElseIf oLote["statusAtual"] == "PENDENTE"
+                    // Verifica se ensaio está em atraso
+                    If This:ensaioEmAtraso(oLote["dataRecebimento"])
+                        aAdd(aAcoesDisparo, {;
+                            "acao" => "ALERTA_ATRASO",;
+                            "lote" => oLote["lote"],;
+                            "produto" => oLote["produto"],;
+                            "prioridade" => "MEDIA";
+                        })
+                    EndIf
+                EndIf
+                
+                aAdd(aLotesMonitorados, oLote)
+            Next
+            
+            // Executa ações de disparo
+            This:executarAcoesAutomaticas(aAcoesDisparo)
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro no monitoramento de lotes: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("monitorarLotes", "SISTEMA", {"periodo" => DToS(dDataIni) + "-" + DToS(dDataFim)}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "lotes" => aLotesMonitorados, "acoes" => aAcoesDisparo, "totalLotes" => Len(aLotesMonitorados) }
+
+    /*
+     * Gerador de templates de certificados personalizáveis
+     * Permite criar e gerenciar templates de certificados
+     */
+    @Post("/qualidade/templates/criar")
+    action criarTemplate(body)
+        Local cNome, cTipo, cConteudo, cDescricao, aCamposDinamicos
+        Local oTemplate, cCodigo, lErro, cErro
+        
+        cNome := AllTrim(body["nome"])
+        cTipo := AllTrim(body["tipo"])
+        cConteudo := body["conteudo"]
+        cDescricao := Iif(body["descricao"] != Nil, body["descricao"], "")
+        aCamposDinamicos := Iif(body["camposDinamicos"] != Nil, body["camposDinamicos"], {})
+        
+        lErro := .F.
+        cErro := ""
+        
+        If Empty(cNome) .Or. Empty(cTipo) .Or. Empty(cConteudo)
+            Return { "sucesso" => .F., "erro" => "Nome, tipo e conteúdo são obrigatórios" }
+        EndIf
+        
+        Begin Sequence
+            // Gera código único do template
+            cCodigo := This:gerarCodigoTemplate(cTipo)
+            
+            // Valida campos dinâmicos
+            This:validarCamposDinamicos(aCamposDinamicos)
+            
+            oTemplate := {;
+                "codigo" => cCodigo,;
+                "nome" => cNome,;
+                "tipo" => cTipo,;
+                "descricao" => cDescricao,;
+                "conteudo" => cConteudo,;
+                "camposDinamicos" => aCamposDinamicos,;
+                "dataCriacao" => DToS(Date()),;
+                "horaCriacao" => Time(),;
+                "ativo" => .T.;
+            }
+            
+            // Salva template
+            This:salvarTemplate(oTemplate)
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro ao criar template: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("criarTemplate", "SISTEMA", {"nome" => cNome, "tipo" => cTipo}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "template" => oTemplate, "codigo" => cCodigo }
+
+    // =====================================================================
+    // MÉTODOS AUXILIARES - PARTE 2
+    // =====================================================================
+    
+    /*
+     * Busca planos de amostragem ativos no sistema
+     */
+    Method buscarPlanosAmostragem(cProduto, cFornecedor)
+        Local cQuery, aDados, aPlanos, nI, oPlano
+        
+        cQuery := "SELECT QM0_CODIGO, QM0_PRODUT, QM0_FORNEC, QM0_LOJFOR, QM0_TAMANH, " +;
+                 "B1_DESC, A2_NOME FROM QM0010 QM0 " +;
+                 "INNER JOIN SB1010 SB1 ON QM0_PRODUT = B1_COD AND SB1.D_E_L_E_T_ = '' " +;
+                 "LEFT JOIN SA2010 SA2 ON QM0_FORNEC = A2_COD AND QM0_LOJFOR = A2_LOJA AND SA2.D_E_L_E_T_ = '' " +;
+                 "WHERE QM0.D_E_L_E_T_ = ''"
+        
+        If !Empty(cProduto)
+            cQuery += " AND QM0_PRODUT = '" + cProduto + "'"
+        EndIf
+        
+        If !Empty(cFornecedor)
+            cQuery += " AND QM0_FORNEC = '" + cFornecedor + "'"
+        EndIf
+        
+        aDados := This:executarQuery(cQuery)
+        aPlanos := {}
+        
+        For nI := 1 To Len(aDados)
+            oPlano := {;
+                "codigo" => aDados[nI]["QM0_CODIGO"],;
+                "produto" => aDados[nI]["QM0_PRODUT"],;
+                "descricaoProduto" => aDados[nI]["B1_DESC"],;
+                "fornecedor" => aDados[nI]["QM0_FORNEC"],;
+                "loja" => aDados[nI]["QM0_LOJFOR"],;
+                "nomeFornecedor" => aDados[nI]["A2_NOME"],;
+                "tamanhoAtual" => aDados[nI]["QM0_TAMANH"],;
+                "criticidade" => This:obterCriticidadeProduto(aDados[nI]["QM0_PRODUT"]);
+            }
+            aAdd(aPlanos, oPlano)
+        Next
+        
+        Return aPlanos
+
+    /*
+     * Calcula taxa de conformidade para produto/fornecedor
+     */
+    Method calcularTaxaConformidade(cProduto, cFornecedor, nPeriodo)
+        Local cQuery, aDados, nTaxaConformidade, dDataIni
+        
+        dDataIni := Date() - nPeriodo
+        
+        cQuery := "SELECT COUNT(*) AS TOTAL, " +;
+                 "SUM(CASE WHEN QAD_RLAUDO IN ('1','3') THEN 1 ELSE 0 END) AS APROVADOS " +;
+                 "FROM QAD010 WHERE D_E_L_E_T_ = '' " +;
+                 "AND QAD_PRODUT = '" + cProduto + "'" +;
+                 "AND QAD_DTENTR >= '" + DToS(dDataIni) + "'"
+        
+        If !Empty(cFornecedor)
+            cQuery += " AND QAD_FORNEC = '" + cFornecedor + "'"
+        EndIf
+        
+        aDados := This:executarQuery(cQuery)
+        
+        If !Empty(aDados) .And. aDados[1]["TOTAL"] > 0
+            nTaxaConformidade := Round((aDados[1]["APROVADOS"] / aDados[1]["TOTAL"]) * 100, 2)
+        Else
+            nTaxaConformidade := 95 // Valor padrão se não há histórico
+        EndIf
+        
+        Return nTaxaConformidade
+
+    /*
+     * Algoritmo para calcular novo tamanho de amostra
+     */
+    Method calcularNovoTamanhoAmostra(nTamanhoAtual, nTaxaConformidade, cCriticidade)
+        Local nNovoTamanho, nFatorAjuste, nMinimo, nMaximo
+        
+        // Define limites baseados na criticidade
+        If cCriticidade == "ALTA"
+            nMinimo := 5
+            nMaximo := 50
+        ElseIf cCriticidade == "MEDIA"
+            nMinimo := 3
+            nMaximo := 30
+        Else
+            nMinimo := 2
+            nMaximo := 20
+        EndIf
+        
+        // Algoritmo de ajuste baseado na taxa de conformidade
+        If nTaxaConformidade >= 99
+            nFatorAjuste := 0.7  // Reduz 30%
+        ElseIf nTaxaConformidade >= 98
+            nFatorAjuste := 0.8  // Reduz 20%
+        ElseIf nTaxaConformidade >= 95
+            nFatorAjuste := 0.9  // Reduz 10%
+        ElseIf nTaxaConformidade >= 90
+            nFatorAjuste := 1.0  // Mantém
+        ElseIf nTaxaConformidade >= 85
+            nFatorAjuste := 1.2  // Aumenta 20%
+        Else
+            nFatorAjuste := 1.5  // Aumenta 50%
+        EndIf
+        
+        nNovoTamanho := Round(nTamanhoAtual * nFatorAjuste, 0)
+        
+        // Aplica limites
+        nNovoTamanho := Max(nMinimo, Min(nMaximo, nNovoTamanho))
+        
+        Return nNovoTamanho
+
+    /*
+     * Gera justificativa para mudança de amostragem
+     */
+    Method gerarJustificativaAmostragem(nTaxaConformidade, nTamanhoAtual, nNovoTamanho)
+        Local cJustificativa
+        
+        If nNovoTamanho > nTamanhoAtual
+            cJustificativa := "Aumento de " + cValToChar(nTamanhoAtual) + " para " + cValToChar(nNovoTamanho) + ;
+                            " devido à taxa de conformidade de " + cValToChar(nTaxaConformidade) + "% (abaixo do esperado)"
+        ElseIf nNovoTamanho < nTamanhoAtual
+            cJustificativa := "Redução de " + cValToChar(nTamanhoAtual) + " para " + cValToChar(nNovoTamanho) + ;
+                            " devido à excelente taxa de conformidade de " + cValToChar(nTaxaConformidade) + "%"
+        Else
+            cJustificativa := "Tamanho mantido em " + cValToChar(nTamanhoAtual) + ;
+                            " - taxa de conformidade de " + cValToChar(nTaxaConformidade) + "% adequada"
+        EndIf
+        
+        Return cJustificativa
+
+    /*
+     * Busca dados dos ensaios para um lote específico
+     */
+    Method buscarDadosEnsaios(cLote, cProduto)
+        Local cQuery, aDados, aEnsaios, nI, oEnsaio
+        
+        cQuery := "SELECT QAD_LOTE, QAD_PRODUT, QAD_ENSAIO, QAD_RLAUDO, QAD_DTENTR, " +;
+                 "QAD_TPRES, QAD_RESULT, QAE_DESC FROM QAD010 QAD " +;
+                 "INNER JOIN QAE010 QAE ON QAD_ENSAIO = QAE_ENSAIO AND QAE.D_E_L_E_T_ = '' " +;
+                 "WHERE QAD.D_E_L_E_T_ = '' " +;
+                 "AND QAD_LOTE = '" + cLote + "' AND QAD_PRODUT = '" + cProduto + "'"
+        
+        aDados := This:executarQuery(cQuery)
+        aEnsaios := {}
+        
+        For nI := 1 To Len(aDados)
+            oEnsaio := {;
+                "lote" => aDados[nI]["QAD_LOTE"],;
+                "produto" => aDados[nI]["QAD_PRODUT"],;
+                "ensaio" => aDados[nI]["QAD_ENSAIO"],;
+                "descricaoEnsaio" => aDados[nI]["QAE_DESC"],;
+                "resultado" => aDados[nI]["QAD_RESULT"],;
+                "laudo" => aDados[nI]["QAD_RLAUDO"],;
+                "dataEnsaio" => aDados[nI]["QAD_DTENTR"],;
+                "tipoResultado" => aDados[nI]["QAD_TPRES"];
+            }
+            aAdd(aEnsaios, oEnsaio)
+        Next
+        
+        Return aEnsaios
+
+    /*
+     * Verifica se lote foi aprovado em todos os ensaios
+     */
+    Method verificarLoteAprovado(aDadosEnsaios)
+        Local nI, lAprovado
+        
+        lAprovado := .T.
+        
+        For nI := 1 To Len(aDadosEnsaios)
+            If !(aDadosEnsaios[nI]["laudo"] $ "1|3") // 1=Aprovado, 3=Aprovado com restrição
+                lAprovado := .F.
+                Exit
+            EndIf
+        Next
+        
+        Return lAprovado
+
+    /*
+     * Monta conteúdo do certificado baseado no template
+     */
+    Method montarCertificado(cTemplate, aDadosEnsaios, cTipoCertificado)
+        Local cConteudo, nI, oEnsaio, cResultados, dDataCertificado
+        
+        dDataCertificado := Date()
+        cResultados := ""
+        
+        // Monta tabela de resultados
+        For nI := 1 To Len(aDadosEnsaios)
+            oEnsaio := aDadosEnsaios[nI]
+            cResultados += oEnsaio["descricaoEnsaio"] + ": " + oEnsaio["resultado"] + " - " + ;
+                          Iif(oEnsaio["laudo"] == "1", "APROVADO", Iif(oEnsaio["laudo"] == "3", "APROVADO C/ RESTRIÇÃO", "REPROVADO")) + CRLF
+        Next
+        
+        // Substitui campos dinâmicos no template
+        cConteudo := StrTran(cTemplate, "{LOTE}", aDadosEnsaios[1]["lote"])
+        cConteudo := StrTran(cConteudo, "{PRODUTO}", aDadosEnsaios[1]["produto"])
+        cConteudo := StrTran(cConteudo, "{DATA_CERTIFICADO}", DToC(dDataCertificado))
+        cConteudo := StrTran(cConteudo, "{RESULTADOS}", cResultados)
+        cConteudo := StrTran(cConteudo, "{TIPO_CERTIFICADO}", cTipoCertificado)
+        
+        Return cConteudo
+
+    /*
+     * Busca template padrão por tipo de certificado
+     */
+    Method buscarTemplatePadrao(cTipoCertificado)
+        Local cTemplate
+        
+        If cTipoCertificado == "CONFORMIDADE"
+            cTemplate := "CERTIFICADO DE CONFORMIDADE" + CRLF + CRLF +;
+                        "Lote: {LOTE}" + CRLF +;
+                        "Produto: {PRODUTO}" + CRLF +;
+                        "Data: {DATA_CERTIFICADO}" + CRLF + CRLF +;
+                        "Resultados dos Ensaios:" + CRLF +;
+                        "{RESULTADOS}" + CRLF +;
+                        "Este produto atende aos requisitos especificados."
+        ElseIf cTipoCertificado == "ANALISE"
+            cTemplate := "CERTIFICADO DE ANÁLISE" + CRLF + CRLF +;
+                        "Lote: {LOTE}" + CRLF +;
+                        "Produto: {PRODUTO}" + CRLF +;
+                        "Data: {DATA_CERTIFICADO}" + CRLF + CRLF +;
+                        "Resultados Analíticos:" + CRLF +;
+                        "{RESULTADOS}"
+        Else
+            cTemplate := "LAUDO TÉCNICO" + CRLF + CRLF +;
+                        "Lote: {LOTE}" + CRLF +;
+                        "Produto: {PRODUTO}" + CRLF +;
+                        "Data: {DATA_CERTIFICADO}" + CRLF + CRLF +;
+                        "Resultados:" + CRLF +;
+                        "{RESULTADOS}"
+        EndIf
+        
+        Return cTemplate
+
+    /*
+     * Obtem criticidade do produto para cálculo de amostragem
+     */
+    Method obterCriticidadeProduto(cProduto)
+        Local cQuery, aDados, cCriticidade
+        
+        // Busca no cadastro de produtos campo customizado de criticidade
+        cQuery := "SELECT B1_XCRIT FROM SB1010 WHERE D_E_L_E_T_ = '' AND B1_COD = '" + cProduto + "'"
+        aDados := This:executarQuery(cQuery)
+        
+        If !Empty(aDados) .And. !Empty(aDados[1]["B1_XCRIT"])
+            cCriticidade := aDados[1]["B1_XCRIT"]
+        Else
+            cCriticidade := "MEDIA" // Valor padrão
+        EndIf
+        
+        Return cCriticidade
+
+    /*
+     * Registra certificado gerado no controle interno
+     */
+    Method registrarCertificado(oCertificado)
+        Local file, fs, all
+        
+        file := "./certificados_gerados.json"
+        all := {}
+        
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+        EndIf
+        
+        aAdd(all, oCertificado)
+        MemoWrite(file, JsonEncode(all))
+        
+        Return .T.
+
+    /*
+     * Gera nome único para arquivo de certificado
+     */
+    Method gerarNomeArquivoCertificado(cLote, cProduto, cTipoCertificado)
+        Local cNome
+        
+        cNome := "./certificados/CERT_" + AllTrim(cTipoCertificado) + "_" + ;
+                AllTrim(cProduto) + "_" + AllTrim(cLote) + "_" + ;
+                DToS(Date()) + "_" + StrTran(Time(), ":", "") + ".txt"
+        
+        Return cNome
+
+    // =====================================================================
     // MÉTODOS AUXILIARES - PARTE 1
     // =====================================================================
     
