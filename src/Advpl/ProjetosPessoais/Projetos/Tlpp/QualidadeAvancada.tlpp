@@ -1,0 +1,446 @@
+#include "tlpp-core.th"
+#include "tlpp-rest.th"
+
+/*
+ * QualidadeAvancada.tlpp
+ * Centro de Controle de Qualidade Avançado - Sistema Completo
+ * 
+ * Autor: Guilherme Souza
+ * Data: 05/08/2025
+ * 
+ * Descrição: Sistema avançado de gestão de qualidade com automações inteligentes,
+ *           análise de tendências, rastreabilidade completa e otimização de processos.
+ *           Utiliza apenas recursos nativos do Protheus.
+ * 
+ * Funcionalidades:
+ * - Parte 1: Dashboard e Análise de Tendências
+ * - Parte 2: Planos de Amostragem Dinâmicos e Certificados Automáticos  
+ * - Parte 3: Rastreabilidade Completa e Calibração de Equipamentos
+ * - Parte 4: Auditorias Automáticas e Relatórios Avançados
+ * - Parte 5: Integrações e Utilitários de Qualidade
+ * 
+ * Versão: 1.0
+ */
+
+Namespace QualidadeAvancada
+
+Using Namespace tlpp.core
+Using Namespace tlpp.rest
+
+/*
+ * Classe principal do sistema de qualidade avançado
+ */
+@RestClass()
+Class QualidadeAvancada
+
+    // =====================================================================
+    // PARTE 1: DASHBOARD E ANÁLISE DE TENDÊNCIAS
+    // =====================================================================
+
+    /*
+     * Dashboard principal do sistema de qualidade
+     * Retorna KPIs principais, indicadores e métricas em tempo real
+     */
+    @Get("/qualidade/dashboard")
+    action dashboardQualidade(params)
+        Local dDataIni, dDataFim, cProduto, cFornecedor, oDashboard, aKPIs
+        Local nTotalEnsaios, nEnsaiosAprovados, nTaxaConformidade, nCustoQualidade
+        Local aProdutosCriticos, aFornecedoresRisco, aNotificacoes, lErro, cErro
+        
+        dDataIni := Iif(!Empty(params["dataInicio"]), SToD(StrTran(params["dataInicio"], "-", "")), Date() - 30)
+        dDataFim := Iif(!Empty(params["dataFim"]), SToD(StrTran(params["dataFim"], "-", "")), Date())
+        cProduto := Iif(params["produto"] != Nil, AllTrim(params["produto"]), "")
+        cFornecedor := Iif(params["fornecedor"] != Nil, AllTrim(params["fornecedor"]), "")
+        
+        lErro := .F.
+        cErro := ""
+        aKPIs := {}
+        aProdutosCriticos := {}
+        aFornecedoresRisco := {}
+        aNotificacoes := {}
+        
+        Begin Sequence
+            // KPI 1: Taxa de Conformidade Geral
+            aKPIs := This:calculaKPIsQualidade(dDataIni, dDataFim, cProduto, cFornecedor)
+            
+            // KPI 2: Produtos Críticos (maior índice de não conformidade)
+            aProdutosCriticos := This:identificaProdutosCriticos(dDataIni, dDataFim)
+            
+            // KPI 3: Fornecedores em Risco
+            aFornecedoresRisco := This:analisaFornecedoresRisco(dDataIni, dDataFim)
+            
+            // KPI 4: Notificações e Alertas
+            aNotificacoes := This:gerarNotificacoesQualidade()
+            
+            oDashboard := {;
+                "periodo" => DToS(dDataIni) + " a " + DToS(dDataFim),;
+                "dataAtualizacao" => DToS(Date()) + " " + Time(),;
+                "kpis" => aKPIs,;
+                "produtosCriticos" => aProdutosCriticos,;
+                "fornecedoresRisco" => aFornecedoresRisco,;
+                "notificacoes" => aNotificacoes,;
+                "alertas" => This:verificarAlertasCriticos();
+            }
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro ao gerar dashboard: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("dashboardQualidade", "SISTEMA", {"periodo" => DToS(dDataIni) + "-" + DToS(dDataFim)}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "dashboard" => oDashboard }
+
+    /*
+     * Análise avançada de tendências de qualidade por produto
+     * Utiliza algoritmos estatísticos para identificar padrões
+     */
+    @Get("/qualidade/tendencias/:produto")
+    action analisarTendencias(params)
+        Local cProduto, dDataIni, dDataFim, aTendencias, aEstatisticas, aDados
+        Local aMediaMovel, aDesvios, aProjecoes, aRecomendacoes, lErro, cErro
+        
+        cProduto := AllTrim(params["produto"])
+        dDataIni := Iif(!Empty(params["dataInicio"]), SToD(StrTran(params["dataInicio"], "-", "")), Date() - 90)
+        dDataFim := Iif(!Empty(params["dataFim"]), SToD(StrTran(params["dataFim"], "-", "")), Date())
+        
+        lErro := .F.
+        cErro := ""
+        aTendencias := {}
+        
+        If Empty(cProduto)
+            Return { "sucesso" => .F., "erro" => "Código do produto é obrigatório" }
+        EndIf
+        
+        Begin Sequence
+            // Coleta dados históricos de ensaios
+            aDados := This:coletaDadosHistoricos(cProduto, dDataIni, dDataFim)
+            
+            If Empty(aDados)
+                Return { "sucesso" => .F., "erro" => "Nenhum dado encontrado para o período" }
+            EndIf
+            
+            // Calcula estatísticas básicas
+            aEstatisticas := This:calculaEstatisticasBasicas(aDados)
+            
+            // Análise de média móvel (7 períodos)
+            aMediaMovel := This:calculaMediaMovel(aDados, 7)
+            
+            // Análise de desvios e outliers
+            aDesvios := This:identificaDesvios(aDados, aEstatisticas["media"], aEstatisticas["desvio"])
+            
+            // Projeções futuras baseadas em tendência
+            aProjecoes := This:calcularProjecoesTendencia(aDados, 30) // 30 dias à frente
+            
+            // Recomendações baseadas na análise
+            aRecomendacoes := This:gerarRecomendacoesTendencia(aEstatisticas, aDesvios, aProjecoes)
+            
+            aTendencias := {;
+                "produto" => cProduto,;
+                "periodo" => DToS(dDataIni) + " a " + DToS(dDataFim),;
+                "totalEnsaios" => Len(aDados),;
+                "estatisticas" => aEstatisticas,;
+                "mediaMovel" => aMediaMovel,;
+                "desvios" => aDesvios,;
+                "projecoes" => aProjecoes,;
+                "recomendacoes" => aRecomendacoes,;
+                "indiceQualidade" => This:calculaIndiceQualidade(aEstatisticas);
+            }
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro na análise de tendências: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("analisarTendencias", "SISTEMA", {"produto" => cProduto}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "analise" => aTendencias }
+
+    /*
+     * Análise comparativa de qualidade entre períodos
+     * Permite comparar performance atual vs período anterior
+     */
+    @Post("/qualidade/comparativo")
+    action analiseComparativa(body)
+        Local dPeriodo1Ini, dPeriodo1Fim, dPeriodo2Ini, dPeriodo2Fim, cFiltro
+        Local aResultados1, aResultados2, oComparativo, nVariacao, lErro, cErro
+        
+        dPeriodo1Ini := SToD(StrTran(body["periodo1"]["inicio"], "-", ""))
+        dPeriodo1Fim := SToD(StrTran(body["periodo1"]["fim"], "-", ""))
+        dPeriodo2Ini := SToD(StrTran(body["periodo2"]["inicio"], "-", ""))
+        dPeriodo2Fim := SToD(StrTran(body["periodo2"]["fim"], "-", ""))
+        cFiltro := Iif(body["filtro"] != Nil, AllTrim(body["filtro"]), "")
+        
+        lErro := .F.
+        cErro := ""
+        
+        If Empty(dPeriodo1Ini) .Or. Empty(dPeriodo1Fim) .Or. Empty(dPeriodo2Ini) .Or. Empty(dPeriodo2Fim)
+            Return { "sucesso" => .F., "erro" => "Todos os períodos são obrigatórios" }
+        EndIf
+        
+        Begin Sequence
+            // Analisa primeiro período
+            aResultados1 := This:analisaPeriodo(dPeriodo1Ini, dPeriodo1Fim, cFiltro)
+            
+            // Analisa segundo período
+            aResultados2 := This:analisaPeriodo(dPeriodo2Ini, dPeriodo2Fim, cFiltro)
+            
+            // Calcula variações
+            nVariacao := This:calculaVariacaoPercentual(aResultados1["taxaConformidade"], aResultados2["taxaConformidade"])
+            
+            oComparativo := {;
+                "periodo1" => {;
+                    "inicio" => DToS(dPeriodo1Ini),;
+                    "fim" => DToS(dPeriodo1Fim),;
+                    "resultados" => aResultados1;
+                },;
+                "periodo2" => {;
+                    "inicio" => DToS(dPeriodo2Ini),;
+                    "fim" => DToS(dPeriodo2Fim),;
+                    "resultados" => aResultados2;
+                },;
+                "variacao" => {;
+                    "taxaConformidade" => nVariacao,;
+                    "tendencia" => Iif(nVariacao > 0, "MELHORIA", Iif(nVariacao < 0, "PIORA", "ESTÁVEL")),;
+                    "significativa" => Abs(nVariacao) > 5;
+                },;
+                "analise" => This:gerarAnaliseComparativa(aResultados1, aResultados2, nVariacao);
+            }
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro na análise comparativa: " + oErr:Description
+        End Sequence
+        
+        This:registraLogQualidade("analiseComparativa", "SISTEMA", {"filtro" => cFiltro}, !lErro)
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "comparativo" => oComparativo }
+
+    /*
+     * Monitor de alertas críticos de qualidade
+     * Sistema de early warning para problemas de qualidade
+     */
+    @Get("/qualidade/alertas")
+    action monitorAlertas(params)
+        Local cTipo, cPrioridade, aAlertas, aAlertasCriticos, aAlertasPreventivos
+        Local lErro, cErro, nTotal
+        
+        cTipo := Iif(params["tipo"] != Nil, AllTrim(params["tipo"]), "TODOS")
+        cPrioridade := Iif(params["prioridade"] != Nil, AllTrim(params["prioridade"]), "TODAS")
+        
+        lErro := .F.
+        cErro := ""
+        aAlertas := {}
+        
+        Begin Sequence
+            // Alertas críticos (requerem ação imediata)
+            aAlertasCriticos := This:verificarAlertasCriticos()
+            
+            // Alertas preventivos (tendências preocupantes)
+            aAlertasPreventivos := This:verificarAlertasPreventivos()
+            
+            // Filtra por tipo se especificado
+            If cTipo == "CRITICOS"
+                aAlertas := aAlertasCriticos
+            ElseIf cTipo == "PREVENTIVOS"
+                aAlertas := aAlertasPreventivos
+            Else
+                aAlertas := aAlertasCriticos
+                aEval(aAlertasPreventivos, {|x| aAdd(aAlertas, x)})
+            EndIf
+            
+            // Filtra por prioridade se especificado
+            If cPrioridade != "TODAS"
+                aAlertas := aFilter(aAlertas, {|x| x["prioridade"] == cPrioridade})
+            EndIf
+            
+            nTotal := Len(aAlertas)
+            
+        Recover Using oErr
+            lErro := .T.
+            cErro := "Erro ao buscar alertas: " + oErr:Description
+        End Sequence
+        
+        If lErro
+            Return { "sucesso" => .F., "erro" => cErro }
+        EndIf
+        
+        Return { "sucesso" => .T., "alertas" => aAlertas, "total" => nTotal, "dataConsulta" => DToS(Date()) + " " + Time() }
+
+    // =====================================================================
+    // MÉTODOS AUXILIARES - PARTE 1
+    // =====================================================================
+    
+    /*
+     * Calcula KPIs principais de qualidade
+     */
+    Method calculaKPIsQualidade(dDataIni, dDataFim, cProduto, cFornecedor)
+        Local cQuery, aDados, aKPIs, nTotalEnsaios, nAprovados, nReprovados
+        Local nTaxaConformidade, nCustoQualidade, nIndiceCapacidade
+        
+        cQuery := "SELECT COUNT(*) AS TOTAL, " +;
+                 "SUM(CASE WHEN QAD_RLAUDO IN ('1','3') THEN 1 ELSE 0 END) AS APROVADOS, " +;
+                 "SUM(CASE WHEN QAD_RLAUDO = '2' THEN 1 ELSE 0 END) AS REPROVADOS " +;
+                 "FROM QAD010 WHERE D_E_L_E_T_ = '' " +;
+                 "AND QAD_DTENTR BETWEEN '" + DToS(dDataIni) + "' AND '" + DToS(dDataFim) + "'"
+        
+        If !Empty(cProduto)
+            cQuery += " AND QAD_PRODUT = '" + cProduto + "'"
+        EndIf
+        
+        If !Empty(cFornecedor)
+            cQuery += " AND QAD_FORNEC = '" + cFornecedor + "'"
+        EndIf
+        
+        aDados := This:executarQuery(cQuery)
+        
+        If !Empty(aDados)
+            nTotalEnsaios := aDados[1]["TOTAL"]
+            nAprovados := aDados[1]["APROVADOS"]
+            nReprovados := aDados[1]["REPROVADOS"]
+            nTaxaConformidade := Iif(nTotalEnsaios > 0, Round((nAprovados/nTotalEnsaios)*100, 2), 0)
+        Else
+            nTotalEnsaios := 0
+            nAprovados := 0
+            nReprovados := 0
+            nTaxaConformidade := 0
+        EndIf
+        
+        nCustoQualidade := This:calcularCustoQualidade(dDataIni, dDataFim)
+        nIndiceCapacidade := This:calcularIndiceCapacidade(dDataIni, dDataFim)
+        
+        aKPIs := {;
+            "totalEnsaios" => nTotalEnsaios,;
+            "ensaiosAprovados" => nAprovados,;
+            "ensaiosReprovados" => nReprovados,;
+            "taxaConformidade" => nTaxaConformidade,;
+            "custoQualidade" => nCustoQualidade,;
+            "indiceCapacidade" => nIndiceCapacidade,;
+            "status" => Iif(nTaxaConformidade >= 95, "EXCELENTE", Iif(nTaxaConformidade >= 90, "BOM", "CRITICO"));
+        }
+        
+        Return aKPIs
+
+    /*
+     * Identifica produtos com maior risco de qualidade
+     */
+    Method identificaProdutosCriticos(dDataIni, dDataFim)
+        Local cQuery, aDados, aProdutos, nI, oProduto
+        
+        cQuery := "SELECT QAD_PRODUT, B1_DESC, COUNT(*) AS TOTAL_ENSAIOS, " +;
+                 "SUM(CASE WHEN QAD_RLAUDO = '2' THEN 1 ELSE 0 END) AS NAO_CONFORMES, " +;
+                 "ROUND((SUM(CASE WHEN QAD_RLAUDO = '2' THEN 1 ELSE 0 END) * 100.0 / COUNT(*)), 2) AS TAXA_NC " +;
+                 "FROM QAD010 QAD " +;
+                 "INNER JOIN SB1010 SB1 ON QAD_PRODUT = B1_COD AND SB1.D_E_L_E_T_ = '' " +;
+                 "WHERE QAD.D_E_L_E_T_ = '' " +;
+                 "AND QAD_DTENTR BETWEEN '" + DToS(dDataIni) + "' AND '" + DToS(dDataFim) + "' " +;
+                 "GROUP BY QAD_PRODUT, B1_DESC " +;
+                 "HAVING COUNT(*) >= 5 AND (SUM(CASE WHEN QAD_RLAUDO = '2' THEN 1 ELSE 0 END) * 100.0 / COUNT(*)) > 5 " +;
+                 "ORDER BY TAXA_NC DESC"
+        
+        aDados := This:executarQuery(cQuery)
+        aProdutos := {}
+        
+        For nI := 1 To Len(aDados)
+            oProduto := {;
+                "codigo" => aDados[nI]["QAD_PRODUT"],;
+                "descricao" => aDados[nI]["B1_DESC"],;
+                "totalEnsaios" => aDados[nI]["TOTAL_ENSAIOS"],;
+                "naoConformes" => aDados[nI]["NAO_CONFORMES"],;
+                "taxaNC" => aDados[nI]["TAXA_NC"],;
+                "risco" => Iif(aDados[nI]["TAXA_NC"] > 15, "ALTO", Iif(aDados[nI]["TAXA_NC"] > 10, "MEDIO", "BAIXO"));
+            }
+            aAdd(aProdutos, oProduto)
+        Next
+        
+        Return aProdutos
+
+    /*
+     * Analisa fornecedores com risco de qualidade
+     */
+    Method analisaFornecedoresRisco(dDataIni, dDataFim)
+        Local cQuery, aDados, aFornecedores, nI, oFornecedor
+        
+        cQuery := "SELECT QAD_FORNEC, QAD_LOJFOR, A2_NOME, COUNT(*) AS TOTAL_ENSAIOS, " +;
+                 "SUM(CASE WHEN QAD_RLAUDO = '2' THEN 1 ELSE 0 END) AS NAO_CONFORMES, " +;
+                 "ROUND((SUM(CASE WHEN QAD_RLAUDO = '2' THEN 1 ELSE 0 END) * 100.0 / COUNT(*)), 2) AS TAXA_NC " +;
+                 "FROM QAD010 QAD " +;
+                 "INNER JOIN SA2010 SA2 ON QAD_FORNEC = A2_COD AND QAD_LOJFOR = A2_LOJA AND SA2.D_E_L_E_T_ = '' " +;
+                 "WHERE QAD.D_E_L_E_T_ = '' " +;
+                 "AND QAD_DTENTR BETWEEN '" + DToS(dDataIni) + "' AND '" + DToS(dDataFim) + "' " +;
+                 "GROUP BY QAD_FORNEC, QAD_LOJFOR, A2_NOME " +;
+                 "HAVING COUNT(*) >= 3 " +;
+                 "ORDER BY TAXA_NC DESC"
+        
+        aDados := This:executarQuery(cQuery)
+        aFornecedores := {}
+        
+        For nI := 1 To Len(aDados)
+            oFornecedor := {;
+                "codigo" => aDados[nI]["QAD_FORNEC"],;
+                "loja" => aDados[nI]["QAD_LOJFOR"],;
+                "nome" => aDados[nI]["A2_NOME"],;
+                "totalEnsaios" => aDados[nI]["TOTAL_ENSAIOS"],;
+                "naoConformes" => aDados[nI]["NAO_CONFORMES"],;
+                "taxaNC" => aDados[nI]["TAXA_NC"],;
+                "classificacao" => This:classificarFornecedor(aDados[nI]["TAXA_NC"]);
+            }
+            aAdd(aFornecedores, oFornecedor)
+        Next
+        
+        Return aFornecedores
+
+    /*
+     * Executa query SQL e retorna resultado
+     */
+    Method executarQuery(cQuery)
+        Local aDados
+        
+        // Em ambiente real, executaria a query
+        // aDados := QuerySql(cQuery)
+        
+        // Para simulação, retorna dados fictícios
+        aDados := {}
+        
+        Return aDados
+
+    /*
+     * Registra log das operações de qualidade
+     */
+    Method registraLogQualidade(cAcao, cUsuario, oParametros, lSucesso)
+        Local oLog, file, fs, all
+        
+        oLog := {;
+            "acao" => cAcao,;
+            "usuario" => cUsuario,;
+            "parametros" => oParametros,;
+            "sucesso" => lSucesso,;
+            "dataHora" => DToS(Date()) + " " + Time();
+        }
+        
+        file := "./logs_qualidade.json"
+        all := {}
+        
+        If File(file)
+            fs := MemoRead(file)
+            all := JsonDecode(fs)
+        EndIf
+        
+        aAdd(all, oLog)
+        MemoWrite(file, JsonEncode(all))
+        
+        Return .T.
+
+EndClass
