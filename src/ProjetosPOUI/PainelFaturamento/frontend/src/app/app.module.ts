@@ -13,19 +13,20 @@ import { AppComponent } from './app.component';
 import { AppRoutingModule } from './app-routing.module';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { PedidosPendentesComponent } from './components/pedidos-pendentes/pedidos-pendentes.component';
+import { OrcamentosComponent } from './components/orcamentos/orcamentos.component';
 
 @NgModule({
   declarations: [
     AppComponent,
     DashboardComponent,
-    PedidosPendentesComponent
+    PedidosPendentesComponent,
+    OrcamentosComponent
   ],
   imports: [
     BrowserModule,
     BrowserAnimationsModule,
     HttpClientModule,
     FormsModule,
-    RouterModule,
     AppRoutingModule,
     PoModule
   ],

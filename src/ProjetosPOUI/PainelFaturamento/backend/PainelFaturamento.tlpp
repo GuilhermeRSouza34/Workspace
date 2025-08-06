@@ -45,6 +45,8 @@ Class FaturamentoManager
     Method GetDashboard(jParams)
     Method GetPedidosPendentes(jParams)
     Method GetPedidosBloqueados(jParams)
+    Method GetOrcamentos(jParams)
+    Method ExportarOrcamentos(jParams)
     Method GetRankingClientes(jParams)
     Method GetRankingProdutos(jParams)
     Method GetRankingVendedores(jParams)
@@ -98,6 +100,8 @@ Return
 @Get("/faturamento/dashboard")
 @Get("/faturamento/pedidos/pendentes")
 @Get("/faturamento/pedidos/bloqueados")
+@Get("/faturamento/orcamentos")
+@Get("/faturamento/orcamentos/exportar")
 @Get("/faturamento/ranking/clientes")
 @Get("/faturamento/ranking/produtos")
 @Get("/faturamento/ranking/vendedores")
@@ -144,6 +148,12 @@ User Function FaturamentoRouter()
                 
             Case "/faturamento/pedidos/bloqueados" $ cEndpoint
                 cResponse := oFaturamentoManager:GetPedidosBloqueados(jParams)
+                
+            Case "/faturamento/orcamentos/exportar" $ cEndpoint
+                cResponse := oFaturamentoManager:ExportarOrcamentos(jParams)
+                
+            Case "/faturamento/orcamentos" $ cEndpoint
+                cResponse := oFaturamentoManager:GetOrcamentos(jParams)
                 
             Case "/faturamento/ranking/clientes" $ cEndpoint
                 cResponse := oFaturamentoManager:GetRankingClientes(jParams)
@@ -314,6 +324,97 @@ Method GetRankingClientes(jParams) Class FaturamentoManager
     Recover Using oErr
         cErro := "Erro no ranking de clientes: " + oErr:Description
         ::HandleError(oErr, "GetRankingClientes")
+        Return ::FormatResponse(.F., Nil, cErro)
+    End Sequence
+    
+Return ::FormatResponse(.T., oResponse, "")
+
+Method GetOrcamentos(jParams) Class FaturamentoManager
+    Local oResponse, aOrcamentos, aFiltros, nPagina, nTamPag
+    Local dDataIni, dDataFim, cStatus, cEmpresa, lErro, cErro
+    
+    Begin Sequence
+        
+        // Parsing de parâmetros
+        dDataIni := Iif(jParams["dataInicio"] != Nil, SToD(StrTran(jParams["dataInicio"], "-", "")), Date() - 30)
+        dDataFim := Iif(jParams["dataFim"] != Nil, SToD(StrTran(jParams["dataFim"], "-", "")), Date())
+        cStatus := Iif(jParams["status"] != Nil, AllTrim(jParams["status"]), "")
+        cEmpresa := Iif(jParams["empresa"] != Nil, AllTrim(jParams["empresa"]), "")
+        nPagina := Iif(jParams["pagina"] != Nil, Val(jParams["pagina"]), 1)
+        nTamPag := Iif(jParams["tamanhoPagina"] != Nil, Val(jParams["tamanhoPagina"]), 50)
+        
+        // Monta filtros
+        aFiltros := {}
+        aAdd(aFiltros, {"dataInicio", dDataIni})
+        aAdd(aFiltros, {"dataFim", dDataFim})
+        If !Empty(cStatus)
+            aAdd(aFiltros, {"status", cStatus})
+        EndIf
+        If !Empty(cEmpresa)
+            aAdd(aFiltros, {"empresa", cEmpresa})
+        EndIf
+        
+        // Busca orçamentos
+        aOrcamentos := FatGetOrcamentos(aFiltros, nPagina, nTamPag)
+        
+        oResponse := JsonObject():New()
+        oResponse["sucesso"] := .T.
+        oResponse["periodo"] := {"inicio" => DToS(dDataIni), "fim" => DToS(dDataFim)}
+        oResponse["filtros"] := {"status" => cStatus, "empresa" => cEmpresa}
+        oResponse["paginacao"] := {"pagina" => nPagina, "tamanhoPagina" => nTamPag}
+        oResponse["orcamentos"] := aOrcamentos["dados"]
+        oResponse["totalRegistros"] := aOrcamentos["total"]
+        oResponse["totalPaginas"] := Ceiling(aOrcamentos["total"] / nTamPag)
+        oResponse["resumo"] := FatCalculaResumoOrcamentos(aOrcamentos["dados"])
+        
+        ::LogOperation("GetOrcamentos", {"total" => aOrcamentos["total"]}, .T.)
+        
+    Recover Using oErr
+        cErro := "Erro ao buscar orçamentos: " + oErr:Description
+        ::HandleError(oErr, "GetOrcamentos")
+        Return ::FormatResponse(.F., Nil, cErro)
+    End Sequence
+    
+Return ::FormatResponse(.T., oResponse, "")
+
+Method ExportarOrcamentos(jParams) Class FaturamentoManager
+    Local oResponse, cCaminho, cArquivo, aOrcamentos, aFiltros
+    Local dDataIni, dDataFim, cStatus, cEmpresa, lErro, cErro
+    
+    Begin Sequence
+        
+        // Parsing de parâmetros
+        dDataIni := Iif(jParams["dataInicio"] != Nil, SToD(StrTran(jParams["dataInicio"], "-", "")), Date() - 30)
+        dDataFim := Iif(jParams["dataFim"] != Nil, SToD(StrTran(jParams["dataFim"], "-", "")), Date())
+        cStatus := Iif(jParams["status"] != Nil, AllTrim(jParams["status"]), "")
+        cEmpresa := Iif(jParams["empresa"] != Nil, AllTrim(jParams["empresa"]), "")
+        
+        // Monta filtros (sem paginação para export completo)
+        aFiltros := {}
+        aAdd(aFiltros, {"dataInicio", dDataIni})
+        aAdd(aFiltros, {"dataFim", dDataFim})
+        If !Empty(cStatus)
+            aAdd(aFiltros, {"status", cStatus})
+        EndIf
+        If !Empty(cEmpresa)
+            aAdd(aFiltros, {"empresa", cEmpresa})
+        EndIf
+        
+        // Gera arquivo Excel
+        cArquivo := FatGeraExcelOrcamentos(aFiltros)
+        
+        oResponse := JsonObject():New()
+        oResponse["sucesso"] := .T.
+        oResponse["arquivo"] := cArquivo
+        oResponse["periodo"] := {"inicio" => DToS(dDataIni), "fim" => DToS(dDataFim)}
+        oResponse["filtros"] := {"status" => cStatus, "empresa" => cEmpresa}
+        oResponse["dataGeracao"] := FWTimeStamp(3)
+        
+        ::LogOperation("ExportarOrcamentos", {"arquivo" => cArquivo}, .T.)
+        
+    Recover Using oErr
+        cErro := "Erro ao exportar orçamentos: " + oErr:Description
+        ::HandleError(oErr, "ExportarOrcamentos")
         Return ::FormatResponse(.F., Nil, cErro)
     End Sequence
     
@@ -517,6 +618,294 @@ Static Function FatCalculaTotalPedidos(dDataIni, dDataFim, cFiltros)
     EndIf
     
 Return nTotal
+
+//=============================================================================
+// FUNÇÕES AUXILIARES PARA ORÇAMENTOS
+//=============================================================================
+
+Static Function FatGetOrcamentos(aFiltros, nPagina, nTamPag)
+    Local cQuery := ""
+    Local aResultado := {}
+    Local aDados := {}
+    Local nTotal := 0
+    Local nI, oOrcamento
+    Local dDataIni, dDataFim, cStatus, cEmpresa
+    
+    // Extrai filtros
+    dDataIni := Date() - 30
+    dDataFim := Date()
+    cStatus := ""
+    cEmpresa := ""
+    
+    For nI := 1 To Len(aFiltros)
+        If aFiltros[nI][1] == "dataInicio"
+            dDataIni := aFiltros[nI][2]
+        ElseIf aFiltros[nI][1] == "dataFim"
+            dDataFim := aFiltros[nI][2]
+        ElseIf aFiltros[nI][1] == "status"
+            cStatus := aFiltros[nI][2]
+        ElseIf aFiltros[nI][1] == "empresa"
+            cEmpresa := aFiltros[nI][2]
+        EndIf
+    Next
+    
+    // Query principal unificada (igual ao seu relatório)
+    cQuery += " SELECT 'IBRATIN-SP' AS EMPRESA, SCJ.CJ_FILIAL, SCJ.CJ_NUM, SCJ.CJ_EMISSAO, SCJ.CJ_DTAPROV, "
+    cQuery += " SCJ.CJ_CLIENTE, SCJ.CJ_LOJA, SCJ.CJ_XVEND1, SCJ.CJ_XENDENT, SCJ.CJ_XBAIREN, "
+    cQuery += " SCJ.CJ_OBSPED1, SCJ.CJ_STATUS, SA1.A1_NOME, SUM(SCK.CK_VALOR) AS CK_VALOR "
+    cQuery += " FROM " + RetSQLName("SCJ") + " AS SCJ "
+    cQuery += " LEFT JOIN " + RetSQLName("SA1") + " AS SA1 ON SCJ.CJ_CLIENTE = SA1.A1_COD AND SCJ.CJ_LOJA = SA1.A1_LOJA AND SA1.D_E_L_E_T_ = '' "
+    cQuery += " LEFT JOIN " + RetSQLName("SCK") + " AS SCK ON SCJ.CJ_FILIAL = SCK.CK_FILIAL AND SCJ.CJ_NUM = SCK.CK_NUM AND SCK.D_E_L_E_T_ = '' "
+    cQuery += " WHERE SCJ.D_E_L_E_T_ = '' AND SCJ.CJ_STATUS NOT IN ('A', 'B', 'C') "
+    cQuery += " AND SCJ.CJ_EMISSAO >= '" + DToS(dDataIni) + "' "
+    cQuery += " AND SCJ.CJ_EMISSAO <= '" + DToS(dDataFim) + "' "
+    If !Empty(cStatus)
+        cQuery += " AND SCJ.CJ_STATUS = '" + cStatus + "' "
+    EndIf
+    If !Empty(cEmpresa) .And. cEmpresa == "IBRATIN-SP"
+        // Filtro específico para IBRATIN-SP - apenas esta empresa
+    ElseIf !Empty(cEmpresa) .And. cEmpresa != "IBRATIN-SP"
+        // Se filtrou por outra empresa, pula esta parte
+        cQuery += " AND 1=0 "
+    EndIf
+    cQuery += " GROUP BY SCJ.CJ_FILIAL, SCJ.CJ_NUM, SCJ.CJ_EMISSAO, SCJ.CJ_DTAPROV, SCJ.CJ_CLIENTE, SCJ.CJ_LOJA, SCJ.CJ_XVEND1, SCJ.CJ_XENDENT, SCJ.CJ_XBAIREN, SCJ.CJ_OBSPED1, SCJ.CJ_STATUS, SA1.A1_NOME "
+    
+    // Só adiciona UNION se não filtrou por empresa específica ou se filtrou por outra empresa
+    If Empty(cEmpresa) .Or. cEmpresa == "AFA"
+        cQuery += " UNION ALL "
+        cQuery += " SELECT 'AFA' AS EMPRESA, SCJ.CJ_FILIAL, SCJ.CJ_NUM, SCJ.CJ_EMISSAO, SCJ.CJ_DTAPROV, "
+        cQuery += " SCJ.CJ_CLIENTE, SCJ.CJ_LOJA, SCJ.CJ_XVEND1, SCJ.CJ_XENDENT, SCJ.CJ_XBAIREN, "
+        cQuery += " SCJ.CJ_OBSPED1, SCJ.CJ_STATUS, SA1.A1_NOME, SUM(SCK.CK_VALOR) AS CK_VALOR "
+        cQuery += " FROM " + RetSQLName("SCJ") + " AS SCJ "
+        cQuery += " LEFT JOIN " + RetSQLName("SA1") + " AS SA1 ON SCJ.CJ_CLIENTE = SA1.A1_COD AND SCJ.CJ_LOJA = SA1.A1_LOJA AND SA1.D_E_L_E_T_ = '' "
+        cQuery += " LEFT JOIN " + RetSQLName("SCK") + " AS SCK ON SCJ.CJ_FILIAL = SCK.CK_FILIAL AND SCJ.CJ_NUM = SCK.CK_NUM AND SCK.D_E_L_E_T_ = '' "
+        cQuery += " WHERE SCJ.D_E_L_E_T_ = '' AND SCJ.CJ_STATUS NOT IN ('A', 'B', 'C') "
+        cQuery += " AND SCJ.CJ_EMISSAO >= '" + DToS(dDataIni) + "' "
+        cQuery += " AND SCJ.CJ_EMISSAO <= '" + DToS(dDataFim) + "' "
+        If !Empty(cStatus)
+            cQuery += " AND SCJ.CJ_STATUS = '" + cStatus + "' "
+        EndIf
+        If !Empty(cEmpresa) .And. cEmpresa != "AFA"
+            cQuery += " AND 1=0 "
+        EndIf
+        cQuery += " GROUP BY SCJ.CJ_FILIAL, SCJ.CJ_NUM, SCJ.CJ_EMISSAO, SCJ.CJ_DTAPROV, SCJ.CJ_CLIENTE, SCJ.CJ_LOJA, SCJ.CJ_XVEND1, SCJ.CJ_XENDENT, SCJ.CJ_XBAIREN, SCJ.CJ_OBSPED1, SCJ.CJ_STATUS, SA1.A1_NOME "
+    EndIf
+    
+    // Só adiciona terceira empresa se não filtrou por empresa específica ou se filtrou por ela
+    If Empty(cEmpresa) .Or. cEmpresa == "IBRATIN-SUL"
+        cQuery += " UNION ALL "
+        cQuery += " SELECT 'IBRATIN-SUL' AS EMPRESA, SCJ.CJ_FILIAL, SCJ.CJ_NUM, SCJ.CJ_EMISSAO, SCJ.CJ_DTAPROV, "
+        cQuery += " SCJ.CJ_CLIENTE, SCJ.CJ_LOJA, SCJ.CJ_XVEND1, SCJ.CJ_XENDENT, SCJ.CJ_XBAIREN, "
+        cQuery += " SCJ.CJ_OBSPED1, SCJ.CJ_STATUS, SA1.A1_NOME, SUM(SCK.CK_VALOR) AS CK_VALOR "
+        cQuery += " FROM " + RetSQLName("SCJ") + " AS SCJ "
+        cQuery += " LEFT JOIN " + RetSQLName("SA1") + " AS SA1 ON SCJ.CJ_CLIENTE = SA1.A1_COD AND SCJ.CJ_LOJA = SA1.A1_LOJA AND SA1.D_E_L_E_T_ = '' "
+        cQuery += " LEFT JOIN " + RetSQLName("SCK") + " AS SCK ON SCJ.CJ_FILIAL = SCK.CK_FILIAL AND SCJ.CJ_NUM = SCK.CK_NUM AND SCK.D_E_L_E_T_ = '' "
+        cQuery += " WHERE SCJ.D_E_L_E_T_ = '' AND SCJ.CJ_STATUS NOT IN ('A', 'B', 'C') "
+        cQuery += " AND SCJ.CJ_EMISSAO >= '" + DToS(dDataIni) + "' "
+        cQuery += " AND SCJ.CJ_EMISSAO <= '" + DToS(dDataFim) + "' "
+        If !Empty(cStatus)
+            cQuery += " AND SCJ.CJ_STATUS = '" + cStatus + "' "
+        EndIf
+        If !Empty(cEmpresa) .And. cEmpresa != "IBRATIN-SUL"
+            cQuery += " AND 1=0 "
+        EndIf
+        cQuery += " GROUP BY SCJ.CJ_FILIAL, SCJ.CJ_NUM, SCJ.CJ_EMISSAO, SCJ.CJ_DTAPROV, SCJ.CJ_CLIENTE, SCJ.CJ_LOJA, SCJ.CJ_XVEND1, SCJ.CJ_XENDENT, SCJ.CJ_XBAIREN, SCJ.CJ_OBSPED1, SCJ.CJ_STATUS, SA1.A1_NOME "
+    EndIf
+    
+    cQuery += " ORDER BY CJ_FILIAL, CJ_NUM, CJ_EMISSAO "
+    
+    aResultado := FatExecutarQuery(cQuery)
+    nTotal := Len(aResultado)
+    
+    // Converte para objetos JSON
+    For nI := 1 To Len(aResultado)
+        oOrcamento := JsonObject():New()
+        oOrcamento["empresa"] := aResultado[nI]["empresa"]
+        oOrcamento["filial"] := aResultado[nI]["cj_filial"]
+        oOrcamento["numero"] := aResultado[nI]["cj_num"]
+        oOrcamento["status"] := FatGetStatusOrcamento(aResultado[nI]["cj_status"])
+        oOrcamento["statusCodigo"] := aResultado[nI]["cj_status"]
+        oOrcamento["valor"] := aResultado[nI]["ck_valor"]
+        oOrcamento["dataEmissao"] := aResultado[nI]["cj_emissao"]
+        oOrcamento["dataAprovacao"] := aResultado[nI]["cj_dtaprov"]
+        oOrcamento["codigoCliente"] := aResultado[nI]["cj_cliente"]
+        oOrcamento["nomeCliente"] := aResultado[nI]["a1_nome"]
+        oOrcamento["loja"] := aResultado[nI]["cj_loja"]
+        oOrcamento["vendedor"] := aResultado[nI]["cj_xvend1"]
+        oOrcamento["enderecoEntrega"] := aResultado[nI]["cj_xendent"]
+        oOrcamento["bairroEntrega"] := aResultado[nI]["cj_xbairen"]
+        oOrcamento["observacao"] := aResultado[nI]["cj_obsped1"]
+        
+        aAdd(aDados, oOrcamento)
+    Next
+    
+    // Aplicar paginação
+    If nPagina > 1 .Or. nTamPag < nTotal
+        aDados := FatAplicarPaginacao(aDados, nPagina, nTamPag)
+    EndIf
+    
+Return {"dados" => aDados, "total" => nTotal}
+
+Static Function FatGetStatusOrcamento(cStatus)
+    Local cDescricao := ""
+    
+    Do Case
+        Case cStatus == "D"
+            cDescricao := "Não Orçado"
+        Case cStatus == "E"
+            cDescricao := "Orçamento aprovado"
+        Case cStatus == "H"
+            cDescricao := "Orçamento aguardando retorno do Cliente"
+        Case cStatus == "I"
+            cDescricao := "Orçamento aguardando Ordem de Compra"
+        Case cStatus == "J"
+            cDescricao := "Orçamento Ordem de Compra Anexada"
+        Case cStatus == "K"
+            cDescricao := "Orçamento aprovado pelo Cliente"
+        Case cStatus == "L"
+            cDescricao := "Orçamento aguardando envio de E-Mail"
+        Case cStatus == "M"
+            cDescricao := "Aguardando Análises"
+        Case cStatus == "O"
+            cDescricao := "Orçamento reprovado pelo Cliente"
+        Case cStatus == "T"
+            cDescricao := "Orçamento pendente"
+        Case cStatus == "U"
+            cDescricao := "Bloqueado por Regra - Amostra/Doação"
+        Case cStatus == "V"
+            cDescricao := "Bloqueado por Regra - Desconto"
+        Case cStatus == "W"
+            cDescricao := "Orçamento Com Pendência Financeira"
+        Case cStatus == "X"
+            cDescricao := "Bloqueado por Regra - Frete"
+        Case cStatus == "Y"
+            cDescricao := "Bloqueado por Regra - Desconto / Frete"
+        Case cStatus == "Z"
+            cDescricao := "Orçamento Com Pendência de Análise Crítica"
+        OtherWise
+            cDescricao := "Status não identificado: " + cStatus
+    EndCase
+    
+Return cDescricao
+
+Static Function FatCalculaResumoOrcamentos(aOrcamentos)
+    Local oResumo, nI, nTotalValor := 0, nQtdOrcamentos := 0
+    Local aStatusCount := {}
+    Local cStatus
+    
+    oResumo := JsonObject():New()
+    nQtdOrcamentos := Len(aOrcamentos)
+    
+    For nI := 1 To Len(aOrcamentos)
+        nTotalValor += aOrcamentos[nI]["valor"]
+        
+        cStatus := aOrcamentos[nI]["statusCodigo"]
+        nPos := aScan(aStatusCount, {|x| x[1] == cStatus})
+        If nPos == 0
+            aAdd(aStatusCount, {cStatus, 1, aOrcamentos[nI]["status"]})
+        Else
+            aStatusCount[nPos][2]++
+        EndIf
+    Next
+    
+    oResumo["quantidadeTotal"] := nQtdOrcamentos
+    oResumo["valorTotal"] := nTotalValor
+    oResumo["valorMedio"] := Iif(nQtdOrcamentos > 0, nTotalValor / nQtdOrcamentos, 0)
+    oResumo["distribuicaoStatus"] := aStatusCount
+    
+Return oResumo
+
+Static Function FatGeraExcelOrcamentos(aFiltros)
+    Local cArquivo := ""
+    Local cCaminho := GetTempPath()
+    Local cNomeArq := "Orcamentos_" + DToS(Date()) + "_" + StrTran(Time(), ":", "") + ".xlsx"
+    Local oExcel := FWMsExcelEx():New()
+    Local oWorkSheet := Nil
+    Local cWorkSheet := "Orçamentos"
+    Local nRow := 1
+    Local aOrcamentos := {}
+    Local nX := 0
+    Local dDataIni, dDataFim, cStatus, cEmpresa
+    
+    Begin Sequence
+        
+        // Recupera filtros
+        dDataIni := Date() - 30
+        dDataFim := Date()
+        cStatus := ""
+        cEmpresa := ""
+        
+        For nX := 1 To Len(aFiltros)
+            If aFiltros[nX][1] == "dataInicio"
+                dDataIni := aFiltros[nX][2]
+            ElseIf aFiltros[nX][1] == "dataFim"
+                dDataFim := aFiltros[nX][2]
+            ElseIf aFiltros[nX][1] == "status"
+                cStatus := aFiltros[nX][2]
+            ElseIf aFiltros[nX][1] == "empresa"
+                cEmpresa := aFiltros[nX][2]
+            EndIf
+        Next nX
+        
+        // Busca dados dos orçamentos (todos sem paginação para export)
+        aOrcamentos := FatGetOrcamentos(aFiltros, 1, 999999)
+        
+        cArquivo := cCaminho + cNomeArq
+        
+        // Cria planilha
+        oWorkSheet := oExcel:AddworkSheet(cWorkSheet)
+        oWorkSheet:AddTable(cWorkSheet, .F.)
+        
+        // Cabeçalho
+        oWorkSheet:AddRow(cWorkSheet, nRow, {;
+            "EMPRESA", "FILIAL", "NUMERO", "STATUS", "VALOR", "DATA_EMISSAO", ;
+            "DATA_APROVACAO", "CODIGO_CLIENTE", "NOME_CLIENTE", "LOJA", ;
+            "VENDEDOR", "ENDERECO_ENTREGA", "BAIRRO_ENTREGA", "OBSERVACAO"})
+        nRow++
+        
+        // Dados
+        For nX := 1 To Len(aOrcamentos["dados"])
+            oWorkSheet:AddRow(cWorkSheet, nRow, {;
+                aOrcamentos["dados"][nX]["empresa"],;
+                aOrcamentos["dados"][nX]["filial"],;
+                aOrcamentos["dados"][nX]["numero"],;
+                aOrcamentos["dados"][nX]["status"],;
+                aOrcamentos["dados"][nX]["valor"],;
+                aOrcamentos["dados"][nX]["dataEmissao"],;
+                aOrcamentos["dados"][nX]["dataAprovacao"],;
+                aOrcamentos["dados"][nX]["codigoCliente"],;
+                aOrcamentos["dados"][nX]["nomeCliente"],;
+                aOrcamentos["dados"][nX]["loja"],;
+                aOrcamentos["dados"][nX]["vendedor"],;
+                aOrcamentos["dados"][nX]["enderecoEntrega"],;
+                aOrcamentos["dados"][nX]["bairroEntrega"],;
+                aOrcamentos["dados"][nX]["observacao"];
+            })
+            nRow++
+        Next nX
+        
+        // Gera arquivo
+        oExcel:Activate()
+        oExcel:GetXMLFile(cArquivo)
+        
+    Recover Using oErr
+        ConOut("Erro ao gerar Excel: " + oErr:Description)
+        cArquivo := ""
+    End Sequence
+    
+Return cArquivo
+
+Static Function FatAplicarPaginacao(aDados, nPagina, nTamPag)
+    Local aPaginado := {}
+    Local nInicio := ((nPagina - 1) * nTamPag) + 1
+    Local nFim := nPagina * nTamPag
+    Local nI
+    
+    For nI := nInicio To Min(nFim, Len(aDados))
+        aAdd(aPaginado, aDados[nI])
+    Next
+    
+Return aPaginado
 
 Static Function FatCalculaPedidosPendentes(cFiltros)
     Local cQuery := ""

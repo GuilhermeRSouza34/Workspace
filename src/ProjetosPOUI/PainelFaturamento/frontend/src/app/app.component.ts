@@ -21,7 +21,15 @@ import { Router } from '@angular/router';
           p-label="Pedidos Pendentes" 
           p-kind="secondary"
           p-icon="po-icon-list"
-          routerLink="/pedidos-pendentes">
+          routerLink="/pedidos-pendentes"
+          class="po-mr-2">
+        </po-button>
+        
+        <po-button 
+          p-label="Orçamentos" 
+          p-kind="tertiary"
+          p-icon="po-icon-finance"
+          routerLink="/orcamentos">
         </po-button>
         
         <router-outlet></router-outlet>

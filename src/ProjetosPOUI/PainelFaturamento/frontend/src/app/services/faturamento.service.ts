@@ -41,6 +41,24 @@ export interface RankingCliente {
   categoria: string;
 }
 
+export interface Orcamento {
+  empresa: string;
+  filial: string;
+  numero: string;
+  status: string;
+  statusCodigo: string;
+  valor: number;
+  dataEmissao: string;
+  dataAprovacao: string;
+  codigoCliente: string;
+  nomeCliente: string;
+  loja: string;
+  vendedor: string;
+  enderecoEntrega: string;
+  bairroEntrega: string;
+  observacao: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -160,6 +178,62 @@ export class FaturamentoService {
         }),
         catchError(this.handleError<boolean>('atualizarStatusPedido', false))
       );
+  }
+
+  /**
+   * Obtém lista de orçamentos
+   */
+  getOrcamentos(filtros?: any): Observable<any> {
+    let params = new HttpParams();
+    
+    if (filtros) {
+      if (filtros.dataInicio) params = params.set('dataInicio', filtros.dataInicio);
+      if (filtros.dataFim) params = params.set('dataFim', filtros.dataFim);
+      if (filtros.status) params = params.set('status', filtros.status);
+      if (filtros.empresa) params = params.set('empresa', filtros.empresa);
+      if (filtros.pagina) params = params.set('pagina', filtros.pagina.toString());
+      if (filtros.tamanhoPagina) params = params.set('tamanhoPagina', filtros.tamanhoPagina.toString());
+    }
+
+    return this.http.get<any>(`${this.apiUrl}/faturamento/orcamentos`, {
+      ...this.httpOptions,
+      params
+    }).pipe(
+      map(response => {
+        if (response && response.sucesso) {
+          return response;
+        }
+        throw new Error('Erro ao carregar orçamentos');
+      }),
+      catchError(this.handleError<any>('getOrcamentos', {orcamentos: [], totalRegistros: 0}))
+    );
+  }
+
+  /**
+   * Exporta orçamentos para Excel
+   */
+  exportarOrcamentos(filtros?: any): Observable<any> {
+    let params = new HttpParams();
+    
+    if (filtros) {
+      if (filtros.dataInicio) params = params.set('dataInicio', filtros.dataInicio);
+      if (filtros.dataFim) params = params.set('dataFim', filtros.dataFim);
+      if (filtros.status) params = params.set('status', filtros.status);
+      if (filtros.empresa) params = params.set('empresa', filtros.empresa);
+    }
+
+    return this.http.get<any>(`${this.apiUrl}/faturamento/orcamentos/exportar`, {
+      ...this.httpOptions,
+      params
+    }).pipe(
+      map(response => {
+        if (response && response.sucesso) {
+          return response;
+        }
+        throw new Error('Erro ao exportar orçamentos');
+      }),
+      catchError(this.handleError<any>('exportarOrcamentos'))
+    );
   }
 
   /**

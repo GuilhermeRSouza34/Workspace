@@ -1,0 +1,125 @@
+<div class="orcamentos-container">
+  <!-- Filtros -->
+  <po-widget p-title="Filtros de Pesquisa" class="filtros-widget">
+    <div class="po-row">
+      <div class="po-md-3">
+        <po-datepicker 
+          name="dataInicio" 
+          [(ngModel)]="filtros.dataInicio" 
+          p-label="Data Inicial"
+          p-format="dd/mm/yyyy">
+        </po-datepicker>
+      </div>
+      <div class="po-md-3">
+        <po-datepicker 
+          name="dataFim" 
+          [(ngModel)]="filtros.dataFim" 
+          p-label="Data Final"
+          p-format="dd/mm/yyyy">
+        </po-datepicker>
+      </div>
+      <div class="po-md-3">
+        <po-select 
+          name="status" 
+          [(ngModel)]="filtros.status" 
+          [p-options]="statusOptions"
+          p-label="Status">
+        </po-select>
+      </div>
+      <div class="po-md-3">
+        <po-select 
+          name="empresa" 
+          [(ngModel)]="filtros.empresa" 
+          [p-options]="empresaOptions"
+          p-label="Empresa">
+        </po-select>
+      </div>
+    </div>
+    
+    <div class="po-row actions-row">
+      <div class="po-md-6">
+        <po-button 
+          p-label="Buscar" 
+          p-icon="po-icon-search"
+          p-kind="primary"
+          (p-click)="buscarOrcamentos()"
+          class="btn-buscar">
+        </po-button>
+        
+        <po-button 
+          p-label="Limpar" 
+          p-icon="po-icon-refresh"
+          p-kind="tertiary"
+          (p-click)="limparFiltros()"
+          class="po-ml-2">
+        </po-button>
+      </div>
+      <div class="po-md-6 po-text-right">
+        <po-button 
+          p-label="Exportar Excel" 
+          p-icon="po-icon-export"
+          p-kind="secondary"
+          (p-click)="exportarExcel()"
+          [p-disabled]="orcamentos.length === 0">
+        </po-button>
+      </div>
+    </div>
+  </po-widget>
+
+  <!-- Resumo -->
+  <po-widget p-title="Resumo" class="resumo-widget" *ngIf="resumo">
+    <div class="po-row">
+      <div class="po-md-3">
+        <po-info 
+          p-label="Total de Orçamentos" 
+          [p-value]="resumo.quantidadeTotal">
+        </po-info>
+      </div>
+      <div class="po-md-3">
+        <po-info 
+          p-label="Valor Total" 
+          [p-value]="resumo.valorTotal | currency:'BRL':'symbol':'1.2-2':'pt'">
+        </po-info>
+      </div>
+      <div class="po-md-3">
+        <po-info 
+          p-label="Valor Médio" 
+          [p-value]="resumo.valorMedio | currency:'BRL':'symbol':'1.2-2':'pt'">
+        </po-info>
+      </div>
+      <div class="po-md-3">
+        <po-info 
+          p-label="Última Atualização" 
+          [p-value]="ultimaAtualizacao | date:'dd/MM/yyyy HH:mm'">
+        </po-info>
+      </div>
+    </div>
+  </po-widget>
+
+  <!-- Tabela de Orçamentos -->
+  <po-widget p-title="Orçamentos" class="tabela-widget">
+    <po-table 
+      [p-columns]="colunas"
+      [p-items]="orcamentosPaginados"
+      [p-loading]="carregando"
+      [p-height]="400"
+      [p-sort]="true"
+      [p-striped]="true"
+      p-no-data-label="Nenhum orçamento encontrado">
+    </po-table>
+    
+    <!-- Paginação -->
+    <div class="paginacao-container" *ngIf="totalRegistros > tamanhoPagina">
+      <po-page-slide 
+        [p-pages]="totalPaginas"
+        [(ngModel)]="paginaAtual"
+        (p-change)="mudarPagina($event)">
+      </po-page-slide>
+    </div>
+  </po-widget>
+  
+  <!-- Mensagem de Status -->
+  <div class="po-mt-3" *ngIf="mensagem">
+    <po-info [p-value]="mensagem"></po-info>
+  </div>
+</div>
