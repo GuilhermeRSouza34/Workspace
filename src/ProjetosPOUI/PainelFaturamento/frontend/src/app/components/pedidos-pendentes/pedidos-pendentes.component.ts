@@ -10,7 +10,7 @@ import { Component } from '@angular/core';
       <po-table
         [p-columns]="columns"
         [p-items]="pedidos"
-        p-striped="true">
+        [p-striped]="true">
       </po-table>
       
       <br>

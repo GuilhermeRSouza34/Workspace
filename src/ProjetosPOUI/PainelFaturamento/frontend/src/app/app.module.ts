@@ -3,6 +3,7 @@ import { BrowserModule } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { HttpClientModule } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
+import { RouterModule } from '@angular/router';
 
 // Módulos do PO-UI
 import { PoModule } from '@po-ui/ng-components';
@@ -24,6 +25,7 @@ import { PedidosPendentesComponent } from './components/pedidos-pendentes/pedido
     BrowserAnimationsModule,
     HttpClientModule,
     FormsModule,
+    RouterModule,
     AppRoutingModule,
     PoModule
   ],

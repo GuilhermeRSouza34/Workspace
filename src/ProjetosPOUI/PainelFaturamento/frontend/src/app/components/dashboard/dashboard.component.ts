@@ -8,8 +8,7 @@ import { Component } from '@angular/core';
       <p>Aqui será exibido o dashboard com KPIs e gráficos.</p>
       
       <po-widget>
-        <po-widget-header p-title="KPIs Principais">
-        </po-widget-header>
+        <h3>KPIs Principais</h3>
         
         <div class="po-row">
           <div class="po-md-3">
