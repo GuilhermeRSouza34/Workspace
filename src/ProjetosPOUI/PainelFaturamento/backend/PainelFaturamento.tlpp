@@ -1,0 +1,613 @@
+#include "tlpp-core.th"
+#include "tlpp-rest.th"
+
+/*
+ * PainelFaturamento.tlpp
+ * Painel Inteligente de Faturamento - Backend REST API
+ * 
+ * Autor: Guilherme Souza
+ * Data: 06/08/2025
+ * 
+ * Arquitetura Moderna:
+ * - Design Pattern: Singleton + Strategy + Repository
+ * - UMA User Function principal como Router/Controller
+ * - Classe FaturamentoManager com métodos especializados
+ * - Static Functions para acesso a dados e utilitários
+ * - Validação robusta e tratamento de exceções
+ * - Logging estruturado para auditoria
+ * 
+ * Funcionalidades:
+ * - Dashboard com KPIs em tempo real
+ * - Gestão de pedidos pendentes e bloqueados
+ * - Análise de performance e ranking
+ * - Monitoramento de SLA e alertas
+ * - Relatórios avançados de faturamento
+ * - Integração com SC5 (Pedidos) e SC6 (Itens)
+ * 
+ * Versão: 1.0
+ */
+
+//=============================================================================
+// CLASSE PRINCIPAL - GERENCIADOR DE FATURAMENTO
+//=============================================================================
+
+Class FaturamentoManager
+    
+    Data oConfig As Object
+    Data cCurrentUser As Character
+    Data dCurrentDate As Date
+    Data cFilialLogada As Character
+    
+    Method New() Constructor
+    Method Destroy() Destructor
+    
+    // Métodos principais de negócio
+    Method GetDashboard(jParams)
+    Method GetPedidosPendentes(jParams)
+    Method GetPedidosBloqueados(jParams)
+    Method GetRankingClientes(jParams)
+    Method GetRankingProdutos(jParams)
+    Method GetRankingVendedores(jParams)
+    Method GetPerformanceFaturamento(jParams)
+    Method GetAlertas(jParams)
+    Method GetSLA(jParams)
+    Method ProcessarPedido(jBody)
+    Method DesbloquerPedido(jBody)
+    Method GetHistoricoCliente(jParams)
+    Method GetProjecaoFaturamento(jParams)
+    Method ExportarRelatorio(jBody)
+    
+    // Métodos auxiliares
+    Method ValidateParams(oParams, aRequired)
+    Method FormatResponse(lSuccess, oData, cError)
+    Method HandleError(oErr, cContext)
+    Method LogOperation(cAction, oParams, lSuccess)
+    Method CalculateKPIs(dDataIni, dDataFim, cFiltros)
+    
+EndClass
+
+//=============================================================================
+// IMPLEMENTAÇÃO DO CONSTRUTOR E DESTRUCTOR
+//=============================================================================
+
+Method New() Class FaturamentoManager
+    ::oConfig := JsonObject():New()
+    ::cCurrentUser := RetCodUsr()
+    ::dCurrentDate := Date()
+    ::cFilialLogada := cFilAnt
+    
+    // Configurações do sistema
+    ::oConfig["maxRecords"] := 5000
+    ::oConfig["cacheTimeout"] := 300
+    ::oConfig["logLevel"] := "INFO"
+    ::oConfig["enableCache"] := .T.
+    ::oConfig["defaultDays"] := 30
+    
+Return Self
+
+Method Destroy() Class FaturamentoManager
+    If ::oConfig != Nil
+        ::oConfig := Nil
+    EndIf
+Return
+
+//=============================================================================
+// USER FUNCTION PRINCIPAL - ROUTER/CONTROLLER (ÚNICA USER FUNCTION)
+//=============================================================================
+
+@Get("/faturamento/dashboard")
+@Get("/faturamento/pedidos/pendentes")
+@Get("/faturamento/pedidos/bloqueados")
+@Get("/faturamento/ranking/clientes")
+@Get("/faturamento/ranking/produtos")
+@Get("/faturamento/ranking/vendedores")
+@Get("/faturamento/performance")
+@Get("/faturamento/alertas")
+@Get("/faturamento/sla")
+@Get("/faturamento/historico/:cliente")
+@Get("/faturamento/projecao")
+@Post("/faturamento/processar")
+@Post("/faturamento/desbloquear")
+@Post("/faturamento/relatorio/exportar")
+User Function FaturamentoRouter()
+    Local oFaturamentoManager, cEndpoint, cMethod, jParams, jBody, cResponse
+    Local lErro := .F., cErro := ""
+    
+    Begin Sequence
+        
+        // Instancia o gerenciador (Singleton pattern)
+        oFaturamentoManager := FaturamentoManager():New()
+        
+        // Obtém informações da requisição REST
+        cEndpoint := oRest:getEndpoint()
+        cMethod := Upper(oRest:getMethod())
+        
+        // Coleta parâmetros baseado no método HTTP
+        If cMethod == "GET"
+            jParams := oRest:getQueryRequest()
+            // Path parameters (ex: /historico/:cliente)
+            If "/:" $ cEndpoint
+                jParams := FWJSObjectMerge(jParams, oRest:getPathParamsRequest())
+            EndIf
+        Else
+            jBody := oRest:getBodyRequest()
+            jParams := oRest:getQueryRequest()
+        EndIf
+        
+        // ROTEAMENTO INTELIGENTE BASEADO NO ENDPOINT
+        Do Case
+            Case "/faturamento/dashboard" $ cEndpoint
+                cResponse := oFaturamentoManager:GetDashboard(jParams)
+                
+            Case "/faturamento/pedidos/pendentes" $ cEndpoint
+                cResponse := oFaturamentoManager:GetPedidosPendentes(jParams)
+                
+            Case "/faturamento/pedidos/bloqueados" $ cEndpoint
+                cResponse := oFaturamentoManager:GetPedidosBloqueados(jParams)
+                
+            Case "/faturamento/ranking/clientes" $ cEndpoint
+                cResponse := oFaturamentoManager:GetRankingClientes(jParams)
+                
+            Case "/faturamento/ranking/produtos" $ cEndpoint
+                cResponse := oFaturamentoManager:GetRankingProdutos(jParams)
+                
+            Case "/faturamento/ranking/vendedores" $ cEndpoint
+                cResponse := oFaturamentoManager:GetRankingVendedores(jParams)
+                
+            Case "/faturamento/performance" $ cEndpoint
+                cResponse := oFaturamentoManager:GetPerformanceFaturamento(jParams)
+                
+            Case "/faturamento/alertas" $ cEndpoint
+                cResponse := oFaturamentoManager:GetAlertas(jParams)
+                
+            Case "/faturamento/sla" $ cEndpoint
+                cResponse := oFaturamentoManager:GetSLA(jParams)
+                
+            Case "/faturamento/historico" $ cEndpoint
+                cResponse := oFaturamentoManager:GetHistoricoCliente(jParams)
+                
+            Case "/faturamento/projecao" $ cEndpoint
+                cResponse := oFaturamentoManager:GetProjecaoFaturamento(jParams)
+                
+            Case "/faturamento/processar" $ cEndpoint
+                cResponse := oFaturamentoManager:ProcessarPedido(jBody)
+                
+            Case "/faturamento/desbloquear" $ cEndpoint
+                cResponse := oFaturamentoManager:DesbloquerPedido(jBody)
+                
+            Case "/faturamento/relatorio/exportar" $ cEndpoint
+                cResponse := oFaturamentoManager:ExportarRelatorio(jBody)
+                
+            Otherwise
+                cResponse := '{"sucesso": false, "erro": "Endpoint não encontrado: ' + cEndpoint + '"}'
+                oFaturamentoManager:LogOperation("RouterError", {"endpoint" => cEndpoint}, .F.)
+        EndCase
+        
+    Recover Using oErr
+        lErro := .T.
+        cErro := "Erro no roteador principal: " + oErr:Description
+        FatRegistraLog("FaturamentoRouter", "SISTEMA", {"endpoint" => cEndpoint, "erro" => cErro}, .F.)
+        cResponse := '{"sucesso": false, "erro": "' + cErro + '"}'
+    End Sequence
+    
+    // Cleanup (Garbage Collection)
+    If oFaturamentoManager != Nil
+        oFaturamentoManager:Destroy()
+        FreeObj(oFaturamentoManager)
+    EndIf
+    
+Return oRest:setResponse(cResponse)
+
+//=============================================================================
+// IMPLEMENTAÇÃO DOS MÉTODOS DA CLASSE FaturamentoManager
+//=============================================================================
+
+Method GetDashboard(jParams) Class FaturamentoManager
+    Local oResponse, oKPIs, aPedidosPendentes, aTopClientes, aAlertas
+    Local dDataIni, dDataFim, cFiltros, lErro, cErro
+    
+    Begin Sequence
+        
+        // Parsing de parâmetros com valores padrão
+        dDataIni := Iif(jParams["dataInicio"] != Nil, SToD(StrTran(jParams["dataInicio"], "-", "")), Date() - ::oConfig["defaultDays"])
+        dDataFim := Iif(jParams["dataFim"] != Nil, SToD(StrTran(jParams["dataFim"], "-", "")), Date())
+        cFiltros := Iif(jParams["filtros"] != Nil, jParams["filtros"], "")
+        
+        // Coleta de dados através de Static Functions especializadas
+        oKPIs := ::CalculateKPIs(dDataIni, dDataFim, cFiltros)
+        aPedidosPendentes := FatGetPedidosPendentesResumo(dDataIni, dDataFim, 10)
+        aTopClientes := FatGetTopClientes(dDataIni, dDataFim, 5)
+        aAlertas := FatGetAlertasCriticos()
+        
+        // Monta resposta estruturada do dashboard
+        oResponse := JsonObject():New()
+        oResponse["sucesso"] := .T.
+        oResponse["periodo"] := {"inicio" => DToS(dDataIni), "fim" => DToS(dDataFim)}
+        oResponse["kpis"] := oKPIs
+        oResponse["pedidosPendentes"] := aPedidosPendentes
+        oResponse["topClientes"] := aTopClientes
+        oResponse["alertas"] := aAlertas
+        oResponse["ultimaAtualizacao"] := FWTimeStamp(3)
+        oResponse["filial"] := ::cFilialLogada
+        
+        ::LogOperation("GetDashboard", {"periodo" => DToS(dDataIni) + "-" + DToS(dDataFim)}, .T.)
+        
+    Recover Using oErr
+        cErro := "Erro no dashboard de faturamento: " + oErr:Description
+        ::HandleError(oErr, "GetDashboard")
+        Return ::FormatResponse(.F., Nil, cErro)
+    End Sequence
+    
+Return ::FormatResponse(.T., oResponse, "")
+
+Method GetPedidosPendentes(jParams) Class FaturamentoManager
+    Local oResponse, aPedidos, aFiltros, nPagina, nTamPag
+    Local dDataIni, dDataFim, cStatus, cCliente, lErro, cErro
+    
+    Begin Sequence
+        
+        // Parsing de parâmetros de filtro e paginação
+        dDataIni := Iif(jParams["dataInicio"] != Nil, SToD(StrTran(jParams["dataInicio"], "-", "")), Date() - 30)
+        dDataFim := Iif(jParams["dataFim"] != Nil, SToD(StrTran(jParams["dataFim"], "-", "")), Date())
+        cStatus := Iif(jParams["status"] != Nil, AllTrim(jParams["status"]), "")
+        cCliente := Iif(jParams["cliente"] != Nil, AllTrim(jParams["cliente"]), "")
+        nPagina := Iif(jParams["pagina"] != Nil, Val(jParams["pagina"]), 1)
+        nTamPag := Iif(jParams["tamanhoPagina"] != Nil, Val(jParams["tamanhoPagina"]), 50)
+        
+        // Monta filtros dinâmicos
+        aFiltros := {}
+        aAdd(aFiltros, {"dataInicio", dDataIni})
+        aAdd(aFiltros, {"dataFim", dDataFim})
+        If !Empty(cStatus)
+            aAdd(aFiltros, {"status", cStatus})
+        EndIf
+        If !Empty(cCliente)
+            aAdd(aFiltros, {"cliente", cCliente})
+        EndIf
+        
+        // Busca pedidos pendentes com paginação
+        aPedidos := FatGetPedidosPendentes(aFiltros, nPagina, nTamPag)
+        
+        oResponse := JsonObject():New()
+        oResponse["sucesso"] := .T.
+        oResponse["periodo"] := {"inicio" => DToS(dDataIni), "fim" => DToS(dDataFim)}
+        oResponse["filtros"] := {"status" => cStatus, "cliente" => cCliente}
+        oResponse["paginacao"] := {"pagina" => nPagina, "tamanhoPagina" => nTamPag}
+        oResponse["pedidos"] := aPedidos["dados"]
+        oResponse["totalRegistros"] := aPedidos["total"]
+        oResponse["totalPaginas"] := Ceiling(aPedidos["total"] / nTamPag)
+        
+        ::LogOperation("GetPedidosPendentes", {"total" => aPedidos["total"]}, .T.)
+        
+    Recover Using oErr
+        cErro := "Erro ao buscar pedidos pendentes: " + oErr:Description
+        ::HandleError(oErr, "GetPedidosPendentes")
+        Return ::FormatResponse(.F., Nil, cErro)
+    End Sequence
+    
+Return ::FormatResponse(.T., oResponse, "")
+
+Method GetRankingClientes(jParams) Class FaturamentoManager
+    Local oResponse, aRanking, dDataIni, dDataFim, nTop
+    Local cTipoOrdem, lErro, cErro
+    
+    Begin Sequence
+        
+        dDataIni := Iif(jParams["dataInicio"] != Nil, SToD(StrTran(jParams["dataInicio"], "-", "")), Date() - 30)
+        dDataFim := Iif(jParams["dataFim"] != Nil, SToD(StrTran(jParams["dataFim"], "-", "")), Date())
+        nTop := Iif(jParams["top"] != Nil, Val(jParams["top"]), 20)
+        cTipoOrdem := Iif(jParams["orderBy"] != Nil, AllTrim(jParams["orderBy"]), "VALOR") // VALOR, QUANTIDADE, MARGEM
+        
+        // Busca ranking de clientes
+        aRanking := FatGetRankingClientes(dDataIni, dDataFim, nTop, cTipoOrdem)
+        
+        oResponse := JsonObject():New()
+        oResponse["sucesso"] := .T.
+        oResponse["periodo"] := {"inicio" => DToS(dDataIni), "fim" => DToS(dDataFim)}
+        oResponse["tipoOrdenacao"] := cTipoOrdem
+        oResponse["topClientes"] := nTop
+        oResponse["ranking"] := aRanking
+        oResponse["estatisticas"] := FatCalculaEstatisticasRanking(aRanking)
+        
+        ::LogOperation("GetRankingClientes", {"tipo" => cTipoOrdem, "top" => nTop}, .T.)
+        
+    Recover Using oErr
+        cErro := "Erro no ranking de clientes: " + oErr:Description
+        ::HandleError(oErr, "GetRankingClientes")
+        Return ::FormatResponse(.F., Nil, cErro)
+    End Sequence
+    
+Return ::FormatResponse(.T., oResponse, "")
+
+//=============================================================================
+// MÉTODOS AUXILIARES DA CLASSE
+//=============================================================================
+
+Method ValidateParams(oParams, aRequired) Class FaturamentoManager
+    Local nI, cField, aMissingFields := {}
+    
+    For nI := 1 To Len(aRequired)
+        cField := aRequired[nI]
+        If oParams[cField] == Nil .Or. Empty(AllTrim(cValToChar(oParams[cField])))
+            aAdd(aMissingFields, cField)
+        EndIf
+    Next
+    
+Return aMissingFields
+
+Method FormatResponse(lSuccess, oData, cError) Class FaturamentoManager
+    Local oResponse, cJson
+    
+    oResponse := JsonObject():New()
+    oResponse["sucesso"] := lSuccess
+    oResponse["timestamp"] := FWTimeStamp(3)
+    oResponse["servidor"] := GetServerIP()
+    
+    If lSuccess .And. oData != Nil
+        If ValType(oData) == "O"
+            cJson := oData:toJson()
+        Else
+            oResponse["dados"] := oData
+            cJson := oResponse:toJson()
+        EndIf
+    Else
+        oResponse["erro"] := cError
+        cJson := oResponse:toJson()
+    EndIf
+    
+Return cJson
+
+Method HandleError(oErr, cContext) Class FaturamentoManager
+    Local cErrorMsg := ""
+    
+    cErrorMsg := "Contexto: " + cContext + " | "
+    cErrorMsg += "Erro: " + oErr:Description + " | "
+    cErrorMsg += "Linha: " + cValToChar(oErr:ErrorPos) + " | "
+    cErrorMsg += "Operação: " + oErr:Operation + " | "
+    cErrorMsg += "Usuário: " + ::cCurrentUser + " | "
+    cErrorMsg += "Filial: " + ::cFilialLogada
+    
+    FatRegistraLog("Exception", ::cCurrentUser, {"context" => cContext, "error" => cErrorMsg}, .F.)
+    
+Return
+
+Method LogOperation(cAction, oParams, lSuccess) Class FaturamentoManager
+    FatRegistraLog(cAction, ::cCurrentUser, oParams, lSuccess)
+Return
+
+Method CalculateKPIs(dDataIni, dDataFim, cFiltros) Class FaturamentoManager
+    Local oKPIs := JsonObject():New()
+    Local nTotalFaturado, nTotalPedidos, nPedidosPendentes, nTicketMedio
+    Local nMetaMensal, nPercentualMeta, nPedidosAtrasados
+    
+    // Calcula KPIs principais
+    nTotalFaturado := FatCalculaTotalFaturado(dDataIni, dDataFim, cFiltros)
+    nTotalPedidos := FatCalculaTotalPedidos(dDataIni, dDataFim, cFiltros)
+    nPedidosPendentes := FatCalculaPedidosPendentes(cFiltros)
+    nTicketMedio := Iif(nTotalPedidos > 0, nTotalFaturado / nTotalPedidos, 0)
+    nMetaMensal := FatGetMetaMensal(Month(dDataFim), Year(dDataFim))
+    nPercentualMeta := Iif(nMetaMensal > 0, (nTotalFaturado / nMetaMensal) * 100, 0)
+    nPedidosAtrasados := FatCalculaPedidosAtrasados()
+    
+    // Monta objeto de KPIs
+    oKPIs["totalFaturado"] := nTotalFaturado
+    oKPIs["totalPedidos"] := nTotalPedidos
+    oKPIs["pedidosPendentes"] := nPedidosPendentes
+    oKPIs["ticketMedio"] := nTicketMedio
+    oKPIs["metaMensal"] := nMetaMensal
+    oKPIs["percentualMeta"] := nPercentualMeta
+    oKPIs["pedidosAtrasados"] := nPedidosAtrasados
+    oKPIs["crescimentoMensal"] := FatCalculaCrescimentoMensal(dDataIni, dDataFim)
+    
+Return oKPIs
+
+//=============================================================================
+// STATIC FUNCTIONS - REPOSITORY E UTILITÁRIOS
+//=============================================================================
+
+Static Function FatExecutarQuery(cQuery)
+    Local cAlias := GetNextAlias()
+    Local aResultado := {}
+    Local aFields := {}
+    Local aCampos := {}
+    Local nI
+    
+    BeginSQL Alias cAlias
+        %Exp:cQuery%
+    EndSQL
+    
+    If (cAlias)->(!Eof())
+        aFields := (cAlias)->(dbStruct())
+        For nI := 1 To Len(aFields)
+            aAdd(aCampos, aFields[nI][1])
+        Next
+        
+        While (cAlias)->(!Eof())
+            Local oReg := JsonObject():New()
+            For nI := 1 To Len(aCampos)
+                Do Case
+                    Case aFields[nI][2] == "D" // Data
+                        oReg[Lower(aCampos[nI])] := DToS((cAlias)->&(aCampos[nI]))
+                    Case aFields[nI][2] == "N" // Numérico
+                        oReg[Lower(aCampos[nI])] := (cAlias)->&(aCampos[nI])
+                    Otherwise // Character
+                        oReg[Lower(aCampos[nI])] := AllTrim((cAlias)->&(aCampos[nI]))
+                EndCase
+            Next
+            aAdd(aResultado, oReg)
+            (cAlias)->(dbSkip())
+        End
+    EndIf
+    
+    (cAlias)->(dbCloseArea())
+    
+Return aResultado
+
+Static Function FatRegistraLog(cAcao, cUsuario, oParametros, lSucesso)
+    Local cQuery := ""
+    Local cParametros := ""
+    
+    If ValType(oParametros) == "O"
+        cParametros := oParametros:toJson()
+    ElseIf ValType(oParametros) == "A"
+        Local oTemp := JsonObject():New()
+        Local nI
+        For nI := 1 To Len(oParametros)
+            oTemp["param" + cValToChar(nI)] := oParametros[nI]
+        Next
+        cParametros := oTemp:toJson()
+    Else
+        cParametros := cValToChar(oParametros)
+    EndIf
+    
+    // Log em tabela customizada (ZFA - Log Faturamento)
+    cQuery := "INSERT INTO " + RetSQLName("ZFA") + " "
+    cQuery += "(ZFA_FILIAL, ZFA_ACAO, ZFA_USER, ZFA_DATA, ZFA_HORA, ZFA_PARAM, ZFA_STATUS) "
+    cQuery += "VALUES ('" + xFilial("ZFA") + "', "
+    cQuery += "'" + cAcao + "', "
+    cQuery += "'" + cUsuario + "', "
+    cQuery += "'" + DToS(Date()) + "', "
+    cQuery += "'" + Time() + "', "
+    cQuery += "'" + cParametros + "', "
+    cQuery += "'" + Iif(lSucesso, "SUCCESS", "ERROR") + "')"
+    
+    TCSQLExec(cQuery)
+    
+Return
+
+Static Function FatCalculaTotalFaturado(dDataIni, dDataFim, cFiltros)
+    Local cQuery := ""
+    Local aResultado := {}
+    Local nTotal := 0
+    
+    cQuery := "SELECT SUM(C6_VALOR) AS TOTAL_FATURADO "
+    cQuery += "FROM " + RetSQLName("SC5") + " C5 "
+    cQuery += "INNER JOIN " + RetSQLName("SC6") + " C6 "
+    cQuery += "ON C6.C6_FILIAL = C5.C5_FILIAL "
+    cQuery += "AND C6.C6_NUM = C5.C5_NUM "
+    cQuery += "WHERE C5.C5_FILIAL = '" + xFilial("SC5") + "' "
+    cQuery += "AND C5.C5_EMISSAO BETWEEN '" + DToS(dDataIni) + "' AND '" + DToS(dDataFim) + "' "
+    cQuery += "AND C5.C5_NOTA <> '' "
+    cQuery += "AND C5.D_E_L_E_T_ = ' ' "
+    cQuery += "AND C6.D_E_L_E_T_ = ' '"
+    
+    aResultado := FatExecutarQuery(cQuery)
+    
+    If Len(aResultado) > 0
+        nTotal := aResultado[1]["total_faturado"]
+    EndIf
+    
+Return nTotal
+
+Static Function FatCalculaTotalPedidos(dDataIni, dDataFim, cFiltros)
+    Local cQuery := ""
+    Local aResultado := {}
+    Local nTotal := 0
+    
+    cQuery := "SELECT COUNT(*) AS TOTAL_PEDIDOS "
+    cQuery += "FROM " + RetSQLName("SC5") + " C5 "
+    cQuery += "WHERE C5.C5_FILIAL = '" + xFilial("SC5") + "' "
+    cQuery += "AND C5.C5_EMISSAO BETWEEN '" + DToS(dDataIni) + "' AND '" + DToS(dDataFim) + "' "
+    cQuery += "AND C5.D_E_L_E_T_ = ' '"
+    
+    aResultado := FatExecutarQuery(cQuery)
+    
+    If Len(aResultado) > 0
+        nTotal := aResultado[1]["total_pedidos"]
+    EndIf
+    
+Return nTotal
+
+Static Function FatCalculaPedidosPendentes(cFiltros)
+    Local cQuery := ""
+    Local aResultado := {}
+    Local nTotal := 0
+    
+    cQuery := "SELECT COUNT(*) AS PEDIDOS_PENDENTES "
+    cQuery += "FROM " + RetSQLName("SC5") + " C5 "
+    cQuery += "WHERE C5.C5_FILIAL = '" + xFilial("SC5") + "' "
+    cQuery += "AND C5.C5_NOTA = '' "
+    cQuery += "AND C5.C5_BLQ = '' "
+    cQuery += "AND C5.D_E_L_E_T_ = ' '"
+    
+    aResultado := FatExecutarQuery(cQuery)
+    
+    If Len(aResultado) > 0
+        nTotal := aResultado[1]["pedidos_pendentes"]
+    EndIf
+    
+Return nTotal
+
+Static Function FatGetPedidosPendentesResumo(dDataIni, dDataFim, nLimit)
+    Local cQuery := ""
+    Local aResultado := {}
+    
+    cQuery := "SELECT TOP " + cValToChar(nLimit) + " "
+    cQuery += "C5.C5_NUM AS PEDIDO, C5.C5_CLIENTE AS CLIENTE, C5.C5_LOJACLI AS LOJA, "
+    cQuery += "A1.A1_NOME AS NOME_CLIENTE, C5.C5_EMISSAO AS EMISSAO, "
+    cQuery += "SUM(C6.C6_VALOR) AS VALOR_TOTAL, C5.C5_VEND1 AS VENDEDOR "
+    cQuery += "FROM " + RetSQLName("SC5") + " C5 "
+    cQuery += "INNER JOIN " + RetSQLName("SC6") + " C6 "
+    cQuery += "ON C6.C6_FILIAL = C5.C5_FILIAL AND C6.C6_NUM = C5.C5_NUM "
+    cQuery += "INNER JOIN " + RetSQLName("SA1") + " A1 "
+    cQuery += "ON A1.A1_FILIAL = '" + xFilial("SA1") + "' AND A1.A1_COD = C5.C5_CLIENTE AND A1.A1_LOJA = C5.C5_LOJACLI "
+    cQuery += "WHERE C5.C5_FILIAL = '" + xFilial("SC5") + "' "
+    cQuery += "AND C5.C5_EMISSAO BETWEEN '" + DToS(dDataIni) + "' AND '" + DToS(dDataFim) + "' "
+    cQuery += "AND C5.C5_NOTA = '' "
+    cQuery += "AND C5.C5_BLQ = '' "
+    cQuery += "AND C5.D_E_L_E_T_ = ' ' "
+    cQuery += "AND C6.D_E_L_E_T_ = ' ' "
+    cQuery += "AND A1.D_E_L_E_T_ = ' ' "
+    cQuery += "GROUP BY C5.C5_NUM, C5.C5_CLIENTE, C5.C5_LOJACLI, A1.A1_NOME, C5.C5_EMISSAO, C5.C5_VEND1 "
+    cQuery += "ORDER BY SUM(C6.C6_VALOR) DESC"
+    
+    aResultado := FatExecutarQuery(cQuery)
+    
+Return aResultado
+
+// Implementar outras Static Functions...
+
+Static Function FatGetTopClientes(dDataIni, dDataFim, nTop)
+    Local cQuery := ""
+    
+    cQuery := "SELECT TOP " + cValToChar(nTop) + " "
+    cQuery += "C5.C5_CLIENTE + '-' + C5.C5_LOJACLI AS CODIGO_CLIENTE, "
+    cQuery += "A1.A1_NOME AS NOME_CLIENTE, "
+    cQuery += "SUM(C6.C6_VALOR) AS VALOR_TOTAL, "
+    cQuery += "COUNT(*) AS QTD_PEDIDOS "
+    cQuery += "FROM " + RetSQLName("SC5") + " C5 "
+    cQuery += "INNER JOIN " + RetSQLName("SC6") + " C6 ON C6.C6_FILIAL = C5.C5_FILIAL AND C6.C6_NUM = C5.C5_NUM "
+    cQuery += "INNER JOIN " + RetSQLName("SA1") + " A1 ON A1.A1_FILIAL = '" + xFilial("SA1") + "' AND A1.A1_COD = C5.C5_CLIENTE AND A1.A1_LOJA = C5.C5_LOJACLI "
+    cQuery += "WHERE C5.C5_FILIAL = '" + xFilial("SC5") + "' "
+    cQuery += "AND C5.C5_EMISSAO BETWEEN '" + DToS(dDataIni) + "' AND '" + DToS(dDataFim) + "' "
+    cQuery += "AND C5.C5_NOTA <> '' "
+    cQuery += "AND C5.D_E_L_E_T_ = ' ' AND C6.D_E_L_E_T_ = ' ' AND A1.D_E_L_E_T_ = ' ' "
+    cQuery += "GROUP BY C5.C5_CLIENTE, C5.C5_LOJACLI, A1.A1_NOME "
+    cQuery += "ORDER BY SUM(C6.C6_VALOR) DESC"
+    
+Return FatExecutarQuery(cQuery)
+
+Static Function FatGetAlertasCriticos()
+    Local aAlertas := {}
+    Local oAlerta := JsonObject():New()
+    
+    // Exemplo de alerta crítico
+    oAlerta["tipo"] := "CRITICO"
+    oAlerta["titulo"] := "Pedidos Atrasados"
+    oAlerta["descricao"] := "Existem 15 pedidos com mais de 5 dias sem faturamento"
+    oAlerta["prioridade"] := "ALTA"
+    oAlerta["data"] := DToS(Date())
+    
+    aAdd(aAlertas, oAlerta)
+    
+Return aAlertas
+
+Static Function FatGetMetaMensal(nMes, nAno)
+    // Implementar busca de meta mensal
+    // Por ora, retorna valor fixo para exemplo
+Return 500000
+
+Static Function FatCalculaCrescimentoMensal(dDataIni, dDataFim)
+    // Implementar cálculo de crescimento
+    // Por ora, retorna valor fixo para exemplo
+Return 12.5

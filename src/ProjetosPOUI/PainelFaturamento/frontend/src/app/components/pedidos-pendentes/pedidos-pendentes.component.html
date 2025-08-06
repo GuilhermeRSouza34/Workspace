@@ -1,0 +1,170 @@
+<!-- Template de Pedidos Pendentes -->
+<div class="pedidos-container">
+  
+  <!-- Cabeçalho -->
+  <po-page-default
+    p-title="Pedidos Pendentes"
+    p-subtitle="Gestão de pedidos aguardando processamento"
+    [p-actions]="pageActions">
+
+    <!-- Filtros -->
+    <po-container>
+      <div class="filters-section">
+        <po-divider p-label="Filtros de Pesquisa"></po-divider>
+        
+        <po-row>
+          <po-col [p-sm]="12" [p-md]="3">
+            <po-datepicker
+              name="dataInicio"
+              p-label="Data Início"
+              [(ngModel)]="filtros.dataInicio"
+              (p-change)="aplicarFiltros()">
+            </po-datepicker>
+          </po-col>
+
+          <po-col [p-sm]="12" [p-md]="3">
+            <po-datepicker
+              name="dataFim"
+              p-label="Data Fim"
+              [(ngModel)]="filtros.dataFim"
+              (p-change)="aplicarFiltros()">
+            </po-datepicker>
+          </po-col>
+
+          <po-col [p-sm]="12" [p-md]="3">
+            <po-select
+              name="vendedor"
+              p-label="Vendedor"
+              [(ngModel)]="filtros.vendedor"
+              [p-options]="vendedoresOptions"
+              (p-change)="aplicarFiltros()">
+            </po-select>
+          </po-col>
+
+          <po-col [p-sm]="12" [p-md]="3">
+            <po-select
+              name="status"
+              p-label="Status"
+              [(ngModel)]="filtros.status"
+              [p-options]="statusOptions"
+              (p-change)="aplicarFiltros()">
+            </po-select>
+          </po-col>
+        </po-row>
+
+        <po-row>
+          <po-col [p-sm]="12" [p-md]="8">
+            <po-input
+              name="cliente"
+              p-label="Cliente"
+              p-placeholder="Digite o nome do cliente..."
+              [(ngModel)]="filtros.cliente"
+              (p-change)="aplicarFiltros()">
+            </po-input>
+          </po-col>
+
+          <po-col [p-sm]="12" [p-md]="4" class="filter-actions">
+            <po-button
+              p-label="Limpar Filtros"
+              p-kind="tertiary"
+              p-icon="ph ph-eraser"
+              (p-click)="limparFiltros()">
+            </po-button>
+          </po-col>
+        </po-row>
+      </div>
+    </po-container>
+
+    <!-- Resumo -->
+    <po-container>
+      <div class="summary-section">
+        <po-row>
+          <po-col [p-sm]="6" [p-md]="3">
+            <po-info
+              p-label="Total de Pedidos"
+              [p-value]="getResumo().total.toString()">
+            </po-info>
+          </po-col>
+
+          <po-col [p-sm]="6" [p-md]="3">
+            <po-info
+              p-label="Valor Total"
+              [p-value]="getResumo().valorTotal | currency:'BRL':'symbol':'1.2-2':'pt'">
+            </po-info>
+          </po-col>
+
+          <po-col [p-sm]="6" [p-md]="3">
+            <po-info
+              p-label="Em Análise"
+              [p-value]="getResumo().emAnalise.toString()">
+            </po-info>
+          </po-col>
+
+          <po-col [p-sm]="6" [p-md]="3">
+            <po-info
+              p-label="Aprovados"
+              [p-value]="getResumo().aprovados.toString()">
+            </po-info>
+          </po-col>
+        </po-row>
+      </div>
+    </po-container>
+
+    <!-- Loading -->
+    <po-loading-overlay 
+      *ngIf="isLoading" 
+      p-text="Carregando pedidos...">
+    </po-loading-overlay>
+
+    <!-- Tabela de Pedidos -->
+    <po-container *ngIf="!isLoading">
+      <po-table
+        [p-columns]="columns"
+        [p-items]="pedidosFiltrados"
+        [p-actions]="actions"
+        p-striped="true"
+        p-sort="true"
+        p-show-more-disabled="false"
+        p-height="400"
+        [p-loading]="isLoading">
+
+        <!-- Template customizado para status -->
+        <ng-template #statusTemplate let-row="row" let-column="column">
+          <po-tag
+            [p-value]="row[column.property]"
+            [p-color]="getStatusColor(row[column.property])">
+          </po-tag>
+        </ng-template>
+
+        <!-- Template para ações customizadas -->
+        <ng-template #actionsTemplate let-row="row">
+          <po-button
+            p-kind="tertiary"
+            p-size="small"
+            p-icon="ph ph-eye"
+            p-label="Detalhes"
+            (p-click)="visualizarDetalhes(row)">
+          </po-button>
+        </ng-template>
+
+        <!-- Mensagem quando não há dados -->
+        <div class="no-data" *ngIf="pedidosFiltrados.length === 0 && !isLoading">
+          <po-widget>
+            <div class="no-data-content">
+              <po-icon p-icon="ph ph-list-dashes" p-size="large"></po-icon>
+              <h3>Nenhum pedido encontrado</h3>
+              <p>Não foram encontrados pedidos com os filtros aplicados.</p>
+              <po-button
+                p-label="Limpar Filtros"
+                p-kind="primary"
+                (p-click)="limparFiltros()">
+              </po-button>
+            </div>
+          </po-widget>
+        </div>
+
+      </po-table>
+    </po-container>
+
+  </po-page-default>
+</div>

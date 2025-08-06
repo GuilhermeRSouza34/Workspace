@@ -1,0 +1,36 @@
+<!-- Template principal da aplicação com PO-UI -->
+<po-page-default 
+  p-title="{{ title }}"
+  p-breadcrumb="breadcrumb"
+  p-disclaimer-group="disclaimers">
+  
+  <!-- Menu de navegação lateral -->
+  <po-menu 
+    [p-menus]="menus"
+    p-automatic-toggle="true"
+    p-collapsed="false">
+  </po-menu>
+
+  <!-- Conteúdo principal -->
+  <div class="main-content">
+    <!-- Cabeçalho com informações do usuário -->
+    <div class="header-info">
+      <po-avatar 
+        p-src="assets/images/user-avatar.png"
+        p-size="sm">
+      </po-avatar>
+      <span class="user-info">
+        Bem-vindo ao Painel de Faturamento
+      </span>
+    </div>
+
+    <!-- Router outlet para carregar os componentes -->
+    <router-outlet></router-outlet>
+  </div>
+
+</po-page-default>
+
+<!-- Notificações Toast -->
+<po-notification-group 
+  [p-notifications]="notifications">
+</po-notification-group>

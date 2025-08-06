@@ -1,0 +1,140 @@
+/* Estilos dos Pedidos Pendentes */
+.pedidos-container {
+  .filters-section {
+    background: var(--color-neutral-light-00);
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+    .filter-actions {
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-end;
+    }
+  }
+
+  .summary-section {
+    background: linear-gradient(135deg, var(--color-brand-color-01) 0%, var(--color-brand-color-02) 100%);
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    color: white;
+
+    po-info {
+      ::ng-deep .po-info-value {
+        color: white;
+        font-weight: bold;
+      }
+
+      ::ng-deep .po-info-label {
+        color: rgba(255, 255, 255, 0.8);
+      }
+    }
+  }
+
+  .no-data {
+    .no-data-content {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--color-neutral-dark-70);
+
+      po-icon {
+        margin-bottom: 16px;
+        opacity: 0.5;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        color: var(--color-neutral-dark-90);
+      }
+
+      p {
+        margin-bottom: 20px;
+        font-size: 14px;
+      }
+    }
+  }
+
+  /* Customizações da tabela */
+  ::ng-deep .po-table {
+    .po-table-header {
+      background-color: var(--color-brand-color-01);
+      color: white;
+    }
+
+    .po-table-row {
+      &:hover {
+        background-color: var(--color-neutral-light-05);
+      }
+    }
+
+    .po-tag {
+      font-size: 11px;
+      font-weight: 500;
+    }
+  }
+
+  /* Responsividade */
+  @media (max-width: 768px) {
+    .filters-section {
+      padding: 16px;
+
+      .filter-actions {
+        margin-top: 16px;
+        justify-content: stretch;
+        
+        po-button {
+          width: 100%;
+        }
+      }
+    }
+
+    .summary-section {
+      padding: 16px;
+    }
+
+    ::ng-deep .po-table {
+      font-size: 12px;
+    }
+  }
+}
+
+/* Animações */
+.filters-section,
+.summary-section,
+po-table {
+  animation: slideInFromTop 0.4s ease-out;
+}
+
+@keyframes slideInFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Cores personalizadas para status */
+.status-analise {
+  background-color: var(--color-feedback-warning-base);
+  color: var(--color-feedback-warning-darker);
+}
+
+.status-aprovado {
+  background-color: var(--color-feedback-success-base);
+  color: var(--color-feedback-success-darker);
+}
+
+.status-pendente {
+  background-color: var(--color-feedback-negative-base);
+  color: var(--color-feedback-negative-darker);
+}
+
+.status-separacao {
+  background-color: var(--color-feedback-info-base);
+  color: var(--color-feedback-info-darker);
+}
