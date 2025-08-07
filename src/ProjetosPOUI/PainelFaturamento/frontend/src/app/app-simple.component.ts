@@ -5,7 +5,6 @@ import { Component } from '@angular/core';
   template: `
     <po-page-default p-title="Painel de Faturamento - POUI + TLPP">
       <div class="po-mt-3">
-        <h2>🎉 Frontend funcionando!</h2>
         <p>Sistema de faturamento desenvolvido com PO-UI e Angular.</p>
         
         <po-button 
